@@ -1,0 +1,20 @@
+# Core web framework
+fastapi
+
+# ASGI server to run FastAPI
+uvicorn[standard]
+
+# AI Agent Framework
+crewai
+
+# For making HTTP requests to scrape websites
+requests
+
+# For parsing HTML from scraped websites
+beautifulsoup4
+
+# For the VehicleComparisonAgent's web search tool (API-key free)
+duckduckgo-search
+
+# Good practice for managing environment variables (e.g., API keys)
+python-dotenv
