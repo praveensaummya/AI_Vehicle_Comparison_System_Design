@@ -1,1 +1,7 @@
-venv
+.venv
+.env
+__pycache__/
+.cursor/
+.cursor/environment.json
+.cursor/snapshots/
+.cursor/snapshots/

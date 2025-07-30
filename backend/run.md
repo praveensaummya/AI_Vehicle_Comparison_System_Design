@@ -6,7 +6,7 @@ python -m venv venv
 
 # 3. Activate it (do this every time you start working)
 # On Windows:
-.\venv\Scripts\activate
+.\.venv\Scripts\activate
 # On macOS/Linux:
 source venv/bin/activate
 
@@ -18,3 +18,5 @@ pip install -r requirements.txt
 
 # 6. Deactivate when you're done
 deactivate
+
+pip install "crewai" "crewai-tools" "fastapi" "uvicorn[standard]" "python-dotenv" "beautifulsoup4" "requests" "google-search-results"
