@@ -2,12 +2,13 @@
 
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Car, Search, Sparkles, AlertCircle } from 'lucide-react';
+import { Car, Search, Sparkles, AlertCircle, Filter, X } from 'lucide-react';
 import { ApiClient, validateVehicleAnalysisRequest } from '@/lib/api';
-import { VehicleAnalysisRequest, VehicleAnalysisResponse, ALL_VEHICLES } from '@/types/api';
+import { VehicleAnalysisRequest, VehicleAnalysisResponse, VEHICLE_SUGGESTIONS, ALL_VEHICLES } from '@/types/api';
 import { cn } from '@/lib/utils';
 import ProgressIndicator from '@/components/ui/ProgressIndicator';
 import AdCard from '@/components/ui/AdCard';
+import VehicleSelectionMenu from '@/components/ui/VehicleSelectionMenu';
 
 export default function VehicleComparisonForm() {
   const [vehicle1, setVehicle1] = useState('');
@@ -15,6 +16,27 @@ export default function VehicleComparisonForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<VehicleAnalysisResponse | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [showVehicleSelection, setShowVehicleSelection] = useState(false);
+  const [currentVehicleInput, setCurrentVehicleInput] = useState<1 | 2 | null>(null);
+  
+  const categories = Object.keys(VEHICLE_SUGGESTIONS);
+  
+  const handleVehicleSelect = (vehicle: string) => {
+    if (currentVehicleInput === 1) {
+      setVehicle1(vehicle);
+    } else if (currentVehicleInput === 2) {
+      setVehicle2(vehicle);
+    }
+    setShowVehicleSelection(false);
+    setSelectedCategory(null);
+    setCurrentVehicleInput(null);
+  };
+  
+  const openVehicleSelection = (vehicleNumber: 1 | 2) => {
+    setCurrentVehicleInput(vehicleNumber);
+    setShowVehicleSelection(true);
+  };
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,18 +85,28 @@ export default function VehicleComparisonForm() {
               <label htmlFor="vehicle1" className="block text-sm font-semibold text-gray-700">
                 First Vehicle
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  id="vehicle1"
-                  value={vehicle1}
-                  onChange={e => setVehicle1(e.target.value)}
-                  placeholder="e.g., Toyota Aqua"
-                  className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-gray-900"
-                  list="vehicle-list"
-                  disabled={loading}
-                />
-                <Car className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <div className="space-y-2">
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="vehicle1"
+                    value={vehicle1}
+                    onChange={e => setVehicle1(e.target.value)}
+                    placeholder="e.g., Toyota Aqua"
+                    className="w-full px-4 py-3 pl-12 pr-20 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-gray-900"
+                    list="vehicle-list"
+                    disabled={loading}
+                  />
+                  <Car className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <button
+                    type="button"
+                    onClick={() => openVehicleSelection(1)}
+                    disabled={loading}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 px-3 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 border border-indigo-300 hover:border-indigo-400 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Browse
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -83,18 +115,28 @@ export default function VehicleComparisonForm() {
               <label htmlFor="vehicle2" className="block text-sm font-semibold text-gray-700">
                 Second Vehicle
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  id="vehicle2"
-                  value={vehicle2}
-                  onChange={e => setVehicle2(e.target.value)}
-                  placeholder="e.g., Honda Fit"
-                  className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-gray-900"
-                  list="vehicle-list"
-                  disabled={loading}
-                />
-                <Car className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <div className="space-y-2">
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="vehicle2"
+                    value={vehicle2}
+                    onChange={e => setVehicle2(e.target.value)}
+                    placeholder="e.g., Honda Fit"
+                    className="w-full px-4 py-3 pl-12 pr-20 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-gray-900"
+                    list="vehicle-list"
+                    disabled={loading}
+                  />
+                  <Car className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <button
+                    type="button"
+                    onClick={() => openVehicleSelection(2)}
+                    disabled={loading}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 px-3 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 border border-indigo-300 hover:border-indigo-400 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Browse
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -138,6 +180,14 @@ export default function VehicleComparisonForm() {
           </div>
         </form>
       </div>
+
+{/* Vehicle Selection Menu */}
+      {showVehicleSelection 
+&& (
+        <div className="mb-8">
+          <VehicleSelectionMenu onSelect={handleVehicleSelect} currentInput={currentVehicleInput as 1 | 2} />
+        </div>
+      )}
 
       {/* Progress Indicator */}
       <ProgressIndicator isLoading={loading} className="mb-8" />
