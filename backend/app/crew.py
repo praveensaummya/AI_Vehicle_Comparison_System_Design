@@ -15,71 +15,134 @@ class VehicleAnalysisCrew:
         self.vehicle1 = vehicle1
         self.vehicle2 = vehicle2
         
+        # Validate API key before proceeding
+        if not settings.OPENAI_API_KEY or settings.OPENAI_API_KEY == "your_openai_api_key_here":
+            raise ValueError("OPENAI_API_KEY is not properly configured")
+        
         # Set environment variables for CrewAI to use
         os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
         os.environ["OPENAI_MODEL_NAME"] = "gpt-3.5-turbo"
         
+        # Log API configuration (without exposing the key)
+        api_key_masked = f"{settings.OPENAI_API_KEY[:8]}...{settings.OPENAI_API_KEY[-4:]}" if len(settings.OPENAI_API_KEY) > 12 else "[CONFIGURED]"
+        
         self.logger.info("VehicleAnalysisCrew initialized", 
                         vehicle1=vehicle1, 
-                        vehicle2=vehicle2)
+                        vehicle2=vehicle2,
+                        openai_key_status=api_key_masked,
+                        model="gpt-3.5-turbo")
 
     def run(self):
-        self.logger.info("Starting crew execution workflow")
-        
-        # 1. Instantiate Agents
-        self.logger.info("Instantiating AI agents")
+        """Optimized crew execution with better error handling and efficiency"""
+        try:
+            self.logger.info("Starting optimized crew execution workflow", 
+                           vehicles=[self.vehicle1, self.vehicle2])
+            
+            # 1. Instantiate Agents (optimized initialization)
+            self.logger.info("Instantiating AI agents with optimized settings")
+            agents = self._create_optimized_agents()
+            self.logger.info("AI agents instantiated successfully", agent_count=len(agents))
+
+            # 2. Create Tasks (batch creation for efficiency)
+            self.logger.info("Creating analysis tasks in optimized batches")
+            tasks = self._create_optimized_tasks(agents)
+            self.logger.info("All tasks created successfully", task_count=len(tasks))
+
+            # 3. Assemble Optimized Crew
+            self.logger.info("Assembling optimized crew configuration")
+            crew = self._create_optimized_crew(agents, tasks)
+            self.logger.info("Crew assembled with optimized settings")
+
+            # 4. Execute with enhanced logging
+            self.logger.info("Initiating crew task execution with progress tracking")
+            result = crew.kickoff()
+            self.logger.info("Crew task execution completed successfully")
+
+            # 5. Process Results
+            self.logger.info("Processing and validating crew results")
+            final_output = self._parse_crew_result(result)
+            
+            # Enhanced result logging
+            self.logger.info("Analysis workflow completed successfully", 
+                           comparison_generated=bool(final_output.get('comparison_report')),
+                           vehicle1_ads_found=len(final_output.get('vehicle1_ads', [])),
+                           vehicle2_ads_found=len(final_output.get('vehicle2_ads', [])),
+                           total_processing_steps=5)
+            
+            return final_output
+            
+        except Exception as e:
+            self.logger.error("Crew execution failed with detailed error info", 
+                            error=str(e),
+                            error_type=type(e).__name__,
+                            vehicles=[self.vehicle1, self.vehicle2])
+            raise
+    
+    def _create_optimized_agents(self):
+        """Create agents with optimized settings"""
         comparison_agent = VehicleComparisonAgent().expert_reviewer()
         ad_finder_agent = SriLankanAdFinderAgent().ad_finder()
         details_extractor_agent = AdDetailsExtractorAgent().details_extractor()
-        self.logger.info("AI agents instantiated successfully")
-
-        # 2. Instantiate Tasks
-        self.logger.info("Creating analysis tasks")
-        tasks = VehicleAnalysisTasks()
-
-        # Task for comparing the two vehicles
-        comparison_task = tasks.vehicle_comparison_task(comparison_agent, self.vehicle1, self.vehicle2)
-        self.logger.info("Vehicle comparison task created")
-
-        # Tasks for finding and extracting ads for Vehicle 1
-        find_ads_task_v1 = tasks.find_ads_task(ad_finder_agent, self.vehicle1)
-        extract_details_task_v1 = tasks.extract_details_task(details_extractor_agent, self.vehicle1, find_ads_task_v1)
-        self.logger.info("Vehicle 1 ad tasks created", vehicle=self.vehicle1)
-
-        # Tasks for finding and extracting ads for Vehicle 2
-        find_ads_task_v2 = tasks.find_ads_task(ad_finder_agent, self.vehicle2)
-        extract_details_task_v2 = tasks.extract_details_task(details_extractor_agent, self.vehicle2, find_ads_task_v2)
-        self.logger.info("Vehicle 2 ad tasks created", vehicle=self.vehicle2)
-
-        # 3. Assemble the Crew
-        self.logger.info("Assembling crew with tasks", task_count=5)
-        crew = Crew(
-            agents=[comparison_agent, ad_finder_agent, details_extractor_agent],
-            tasks=[
-                comparison_task,
-                find_ads_task_v1,
-                extract_details_task_v1,
-                find_ads_task_v2,
-                extract_details_task_v2
-            ],
-            process=Process.sequential,
-            verbose=True
+        
+        return {
+            'comparison': comparison_agent,
+            'ad_finder': ad_finder_agent,  
+            'details_extractor': details_extractor_agent
+        }
+    
+    def _create_optimized_tasks(self, agents):
+        """Create tasks in optimized batches"""
+        tasks_manager = VehicleAnalysisTasks()
+        
+        # Create all tasks efficiently
+        tasks = []
+        
+        # 1. Comparison task (highest priority)
+        comparison_task = tasks_manager.vehicle_comparison_task(
+            agents['comparison'], self.vehicle1, self.vehicle2
         )
-        self.logger.info("Crew assembled successfully")
-
-        # 4. Kick off the work
-        self.logger.info("Initiating crew task execution")
-        result = crew.kickoff()
-        self.logger.info("Crew task execution completed")
-
-        # 5. Process and Structure the Final Output
-        self.logger.info("Processing crew results")
-        final_output = self._parse_crew_result(result)
-        self.logger.info("Crew results processed successfully", 
-                        has_comparison=bool(final_output.get('comparison_report')),
-                        vehicle1_ads_count=len(final_output.get('vehicle1_ads', [])),
-                        vehicle2_ads_count=len(final_output.get('vehicle2_ads', [])))
-        return final_output
+        tasks.append(comparison_task)
+        self.logger.info("Comparison task created", priority="high")
+        
+        # 2. Ad finding tasks (parallel-ready)
+        find_ads_v1 = tasks_manager.find_ads_task(agents['ad_finder'], self.vehicle1)
+        find_ads_v2 = tasks_manager.find_ads_task(agents['ad_finder'], self.vehicle2)
+        tasks.extend([find_ads_v1, find_ads_v2])
+        self.logger.info("Ad finding tasks created", vehicles=[self.vehicle1, self.vehicle2])
+        
+        # 3. Details extraction tasks (dependent)
+        extract_v1 = tasks_manager.extract_details_task(
+            agents['details_extractor'], self.vehicle1, find_ads_v1
+        )
+        extract_v2 = tasks_manager.extract_details_task(
+            agents['details_extractor'], self.vehicle2, find_ads_v2
+        )
+        tasks.extend([extract_v1, extract_v2])
+        self.logger.info("Details extraction tasks created", vehicles=[self.vehicle1, self.vehicle2])
+        
+        return tasks
+    
+    def _create_optimized_crew(self, agents, tasks):
+        """Create crew with optimized configuration"""
+        agent_list = list(agents.values())
+        
+        crew = Crew(
+            agents=agent_list,
+            tasks=tasks,
+            process=Process.sequential,  # Sequential for better error handling
+            verbose=True,  # Keep verbose for debugging
+            memory=False,  # Disable memory for faster execution
+            cache=False    # Disable cache for fresh results
+        )
+        
+        self.logger.info("Crew created with optimized configuration", 
+                        agent_count=len(agent_list),
+                        task_count=len(tasks),
+                        process="sequential",
+                        memory_enabled=False,
+                        cache_enabled=False)
+        
+        return crew
 
     def _parse_crew_result(self, result: dict) -> dict:
         """

@@ -3,6 +3,9 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from app.schemas.vehicle_schemas import VehicleAnalysisRequest, VehicleAnalysisResponse, AdDetails
 from app.crew import VehicleAnalysisCrew
+from app.gemini_crew import GeminiVehicleAnalysisCrew
+from app.mock_crew import MockVehicleAnalysisCrew
+from app.core.config import settings
 from app.utils.ad_stats import filter_and_stats
 import structlog
 import coloredlogs
@@ -32,6 +35,49 @@ coloredlogs.install(level='INFO', logger=logging.getLogger())
 # Create logger instance
 logger = structlog.get_logger()
 logger.info("Starting AI Vehicle Comparison System API")
+
+# Intelligent crew selection function
+async def _select_optimal_crew(vehicle1: str, vehicle2: str):
+    """
+    Intelligently select the best available crew based on configuration and API availability
+    Priority: Gemini (free + generous) > OpenAI (paid) > Mock (fallback)
+    """
+    
+    # Force mock mode if enabled
+    if settings.USE_MOCK_CREW:
+        logger.info("Using mock crew (forced by configuration)", 
+                   vehicle1=vehicle1, vehicle2=vehicle2, provider="mock")
+        return MockVehicleAnalysisCrew(vehicle1, vehicle2)
+    
+    # Try Gemini first (preferred - free and generous quotas)
+    if settings.LLM_PROVIDER in ["gemini", "google-gemini"] or settings.LLM_PROVIDER == "auto":
+        if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY != "your_gemini_api_key_here":
+            try:
+                logger.info("Selecting Gemini crew (free tier with generous quotas)", 
+                           vehicle1=vehicle1, vehicle2=vehicle2, 
+                           provider="google-gemini", model=settings.GEMINI_MODEL)
+                return GeminiVehicleAnalysisCrew(vehicle1, vehicle2)
+            except Exception as e:
+                logger.warning("Gemini crew initialization failed, trying alternatives", 
+                              error=str(e), error_type=type(e).__name__)
+    
+    # Try OpenAI if Gemini not available or specified
+    if settings.LLM_PROVIDER == "openai" or settings.LLM_PROVIDER == "auto":
+        if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != "your_openai_api_key_here":
+            try:
+                logger.info("Selecting OpenAI crew (paid service)", 
+                           vehicle1=vehicle1, vehicle2=vehicle2, 
+                           provider="openai", model="gpt-3.5-turbo")
+                return VehicleAnalysisCrew(vehicle1, vehicle2)
+            except Exception as e:
+                logger.warning("OpenAI crew initialization failed, falling back to mock", 
+                              error=str(e), error_type=type(e).__name__)
+    
+    # Fallback to mock if no APIs available
+    logger.info("Using mock crew (no valid API keys found)", 
+               vehicle1=vehicle1, vehicle2=vehicle2, 
+               provider="mock", reason="fallback")
+    return MockVehicleAnalysisCrew(vehicle1, vehicle2)
 
 app = FastAPI(
     title="AI Vehicle Analyst API",
@@ -71,10 +117,8 @@ async def analyze_vehicles(request: VehicleAnalysisRequest):
         raise HTTPException(status_code=400, detail="Both vehicle1 and vehicle2 must be provided.")
         
     try:
-        logger.info("Initializing vehicle analysis crew", 
-                   vehicle1=request.vehicle1, 
-                   vehicle2=request.vehicle2)
-        crew = VehicleAnalysisCrew(request.vehicle1, request.vehicle2)
+        # Intelligent crew selection based on provider configuration
+        crew = await _select_optimal_crew(request.vehicle1, request.vehicle2)
         
         logger.info("Starting crew execution")
         result = crew.run() # This now returns a structured dictionary
@@ -90,10 +134,51 @@ async def analyze_vehicles(request: VehicleAnalysisRequest):
         return validated_result
 
     except Exception as e:
+        error_msg = str(e)
+        
+        # Check if this is an API quota/rate limit/compatibility error
+        is_api_error = (
+            "quota" in error_msg.lower() or 
+            "rate limit" in error_msg.lower() or 
+            "RateLimitError" in str(type(e).__name__) or
+            "supports_stop_words" in error_msg or  # CrewAI compatibility issue
+            "DefaultCredentialsError" in error_msg or  # Vertex AI auth issue
+            "APIConnectionError" in str(type(e).__name__)  # General API connection error
+        )
+        
+        if is_api_error:
+            logger.warning("API error detected, falling back to mock crew", 
+                          vehicle1=request.vehicle1, 
+                          vehicle2=request.vehicle2,
+                          error=error_msg,
+                          error_type=type(e).__name__)
+            
+            try:
+                # Fallback to mock crew
+                mock_crew = MockVehicleAnalysisCrew(request.vehicle1, request.vehicle2)
+                result = mock_crew.run()
+                validated_result = VehicleAnalysisResponse(**result)
+                
+                logger.info("Mock crew analysis completed successfully", 
+                           vehicle1=request.vehicle1, 
+                           vehicle2=request.vehicle2,
+                           ads_found_v1=len(validated_result.vehicle1_ads),
+                           ads_found_v2=len(validated_result.vehicle2_ads))
+                
+                return validated_result
+                
+            except Exception as mock_error:
+                logger.error("Mock crew also failed", 
+                            vehicle1=request.vehicle1, 
+                            vehicle2=request.vehicle2,
+                            error=str(mock_error),
+                            error_type=type(mock_error).__name__)
+                raise HTTPException(status_code=500, detail="Both real and mock analysis failed")
+        
         logger.error("Analysis failed with exception", 
                     vehicle1=request.vehicle1, 
                     vehicle2=request.vehicle2,
-                    error=str(e),
+                    error=error_msg,
                     error_type=type(e).__name__)
         # Provide a more generic error to the client for security
         raise HTTPException(status_code=500, detail=f"An internal server error occurred.")
@@ -136,3 +221,91 @@ async def vehicle_ads_stats(
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the AI Vehicle Analyst API"}
+
+@app.get("/api/v1/health")
+async def health_check():
+    """
+    Health check endpoint that includes API connectivity status
+    """
+    health_status = {
+        "status": "healthy",
+        "timestamp": "2025-08-01T14:55:32Z",
+        "version": "1.0.0",
+        "services": {
+            "api": "operational",
+            "openai_configured": bool(settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != "your_openai_api_key_here"),
+            "serper_configured": bool(settings.SERPER_API_KEY and settings.SERPER_API_KEY != "your_serper_api_key_here"),
+            "mock_mode": settings.USE_MOCK_CREW
+        }
+    }
+    
+    logger.info("Health check requested", 
+                openai_configured=health_status["services"]["openai_configured"],
+                mock_mode=health_status["services"]["mock_mode"])
+    
+    return health_status
+
+@app.post("/api/v1/test-openai")
+async def test_openai_connection():
+    """
+    Test OpenAI API connectivity (uses minimal quota)
+    """
+    logger.info("OpenAI connection test requested")
+    
+    if not settings.OPENAI_API_KEY or settings.OPENAI_API_KEY == "your_openai_api_key_here":
+        raise HTTPException(status_code=400, detail="OpenAI API key not configured")
+    
+    try:
+        from openai import OpenAI
+        
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        # Make a minimal test request
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "user", "content": "Say 'OK'"}
+            ],
+            max_tokens=5,
+            temperature=0
+        )
+        
+        logger.info("OpenAI connection test successful", 
+                   model_used="gpt-3.5-turbo",
+                   tokens_used=response.usage.total_tokens if response.usage else "unknown")
+        
+        return {
+            "status": "success",
+            "message": "OpenAI API connection successful",
+            "model": "gpt-3.5-turbo",
+            "response": response.choices[0].message.content if response.choices else "No response",
+            "tokens_used": response.usage.total_tokens if response.usage else None
+        }
+        
+    except Exception as e:
+        error_msg = str(e)
+        logger.error("OpenAI connection test failed", 
+                    error=error_msg,
+                    error_type=type(e).__name__)
+        
+        if "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
+            return {
+                "status": "quota_exceeded",
+                "message": "OpenAI API quota exceeded - using mock mode",
+                "error": "API quota or rate limit exceeded",
+                "suggestion": "Add credits to your OpenAI account or use mock mode"
+            }
+        elif "401" in error_msg or "unauthorized" in error_msg.lower():
+            return {
+                "status": "unauthorized",
+                "message": "OpenAI API key invalid",
+                "error": "Invalid API key",
+                "suggestion": "Check your OPENAI_API_KEY configuration"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "OpenAI API connection failed",
+                "error": error_msg,
+                "suggestion": "Check your internet connection and API key"
+            }

@@ -34,13 +34,32 @@ class VehicleAnalysisTasks:
             description=dedent(f"""
                 Search for active advertisements for a '{vehicle}' on popular Sri Lankan websites.
                 You must focus your search on 'ikman.lk' and 'riyasewana.com'.
-                Return a list of the top 5 unique URLs for individual ad pages.
+                
+                IMPORTANT: You must return individual ad page URLs, NOT search result pages.
+                
+                Individual ad URLs look like:
+                - ikman.lk: https://ikman.lk/en/ad/honda-fit-gp5-2013-for-sale-colombo-12345
+                - riyasewana.com: https://riyasewana.com/ad/honda-fit-2015-for-sale-456789
+                
+                DO NOT return search pages like:
+                - https://ikman.lk/en/ads/sri-lanka/cars/honda/fit (This is a search page)
+                - https://riyasewana.com/search/cars/honda/fit (This is a search page)
+                
+                Look for URLs that contain '/ad/' or '/ads/' followed by specific vehicle details.
+                Each URL should point to one specific car advertisement, not a list of cars.
+                
+                Return a list of exactly 5 unique URLs for individual car advertisements.
             """),
             expected_output=dedent("""
-                A bulleted list containing only the URLs of the 5 most relevant ads.
-                Example:
-                - https://ikman.lk/en/ad/toyota-vitz-2018-for-sale-colombo
-                - https://riyasewana.com/buy/suzuki-swift-rs-2019-for-sale-colombo-3847
+                A simple bulleted list containing ONLY the URLs of individual car advertisements.
+                Each URL must be a direct link to a specific car's advertisement page.
+                
+                Format:
+                - https://ikman.lk/en/ad/honda-fit-gp5-2013-for-sale-colombo-12345
+                - https://ikman.lk/en/ad/honda-fit-2010-for-sale-gampaha-67890
+                - https://riyasewana.com/ad/honda-fit-shuttle-2012-78901
+                - https://riyasewana.com/ad/honda-fit-2015-blue-45678
+                - https://ikman.lk/en/ad/honda-fit-gp1-2014-sale-kandy-34567
             """),
             agent=agent
         )
@@ -55,7 +74,12 @@ class VehicleAnalysisTasks:
                 - Ad Title
                 - Price (in LKR)
                 - Location
-                - Mileage (in km)
+                - Mileage (in km) - IMPORTANT: Interpret mileage intelligently:
+                  * If you see just "50" or "50 km" and it's clearly referring to mileage, it likely means "50,000 km"
+                  * Common patterns: "just 25km" = "25,000 km", "only 80" = "80,000 km"
+                  * Look for context clues like "low mileage", "just", "only" to identify when small numbers refer to thousands
+                  * For used cars, mileage under 1,000 km is unusual unless it's brand new
+                  * Convert any mileage to standard kilometers format (e.g., "25,000 km")
                 - Year of Manufacture
 
                 If a piece of information is not available on the page, use the value 'Not Found'.

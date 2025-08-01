@@ -4,25 +4,36 @@ from app.tools.search_tool import search_tool
 from app.tools.playwright_scraper import batch_extract_ad_details
 
 class AdDetailsExtractorAgent:
-    def details_extractor(self) -> Agent:
+    def details_extractor(self, llm=None) -> Agent:
         """
         Creates an agent that extracts structured data from vehicle advertisements.
         """
-        return Agent(
-            role="Ad Data Extractor",
-            goal=(
+        agent_config = {
+            "role": "Ad Data Extractor",
+            "goal": (
                 "Extract key information from vehicle advertisement URLs including "
                 "price, location, mileage, year, and other relevant details."
             ),
-            backstory=(
+            "backstory": (
                 "You are a data extraction specialist with expertise in parsing "
                 "vehicle advertisements. You can visit web pages and extract "
-                "structured information from various Sri Lankan vehicle websites."
+                "structured information from various Sri Lankan vehicle websites. "
+                "You have extensive experience interpreting vehicle mileage data, "
+                "understanding that when sellers mention 'just 50km' or 'only 25' "
+                "they typically mean '50,000 km' or '25,000 km' respectively. "
+                "You apply contextual intelligence to convert abbreviated mileage "
+                "figures into their proper full values."
             ),
-            tools=[search_tool],
-            allow_delegation=False,
-            verbose=True
-        )
+            "tools": [search_tool],
+            "allow_delegation": False,
+            "verbose": True
+        }
+        
+        # Add LLM if provided
+        if llm is not None:
+            agent_config["llm"] = llm
+        
+        return Agent(**agent_config)
 
     def extract_details_from_urls(self, urls: list) -> list:
         """
