@@ -5,7 +5,7 @@ from app.agents.ad_finder_agent import SriLankanAdFinderAgent
 from app.agents.details_extractor_agent import AdDetailsExtractorAgent
 from app.tasks import VehicleAnalysisTasks
 from app.core.config import settings
-from langchain_openai import ChatOpenAI
+import os
 import json
 import structlog
 
@@ -14,10 +14,11 @@ class VehicleAnalysisCrew:
         self.logger = structlog.get_logger()
         self.vehicle1 = vehicle1
         self.vehicle2 = vehicle2
-        self.llm = ChatOpenAI(
-            model_name="gpt-3.5-turbo",
-            api_key=settings.OPENAI_API_KEY
-        )
+        
+        # Set environment variables for CrewAI to use
+        os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
+        os.environ["OPENAI_MODEL_NAME"] = "gpt-3.5-turbo"
+        
         self.logger.info("VehicleAnalysisCrew initialized", 
                         vehicle1=vehicle1, 
                         vehicle2=vehicle2)
@@ -62,8 +63,7 @@ class VehicleAnalysisCrew:
                 extract_details_task_v2
             ],
             process=Process.sequential,
-            verbose=True,
-            manager_llm=self.llm
+            verbose=True
         )
         self.logger.info("Crew assembled successfully")
 
