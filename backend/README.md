@@ -1,6 +1,6 @@
 # AI Vehicle Comparison System - Backend
 
-A FastAPI-based backend service that uses CrewAI agents to compare vehicles and find local advertisements in Sri Lanka.
+A production-ready FastAPI backend service that uses CrewAI agents with multi-LLM support (OpenAI GPT-3.5-turbo and Google Gemini 1.5-flash) to compare vehicles and find local advertisements in Sri Lanka. Features intelligent LLM provider selection, robust fallback mechanisms, and comprehensive error handling for system stability.
 
 ## 🚀 Quick Start
 
@@ -32,16 +32,37 @@ A FastAPI-based backend service that uses CrewAI agents to compare vehicles and 
    pip install -r requirements.txt
    ```
 
-4. **Set up environment variables:**
-   Create a `.env` file in the backend directory:
-   ```env
-   OPENAI_API_KEY=your_openai_api_key_here
-   SERPER_API_KEY=your_serper_api_key_here
+4. **Install Playwright browsers:**
+   ```bash
+   playwright install
    ```
 
-5. **Run the server:**
+5. **Set up environment variables:**
+   Create a `.env` file in the backend directory:
+   ```env
+   # OpenAI Configuration (Primary LLM)
+   OPENAI_API_KEY=your_openai_api_key_here
+   OPENAI_MODEL_NAME=gpt-4o-mini
+   
+   # Google Gemini Configuration (Secondary LLM)
+   GOOGLE_API_KEY=your_google_api_key_here
+   GEMINI_API_KEY=your_google_api_key_here
+   
+   # Search Tool Configuration
+   SERPER_API_KEY=your_serper_api_key_here
+   
+   # Database Configuration
+   DATABASE_URL=sqlite:///./vehicle_analysis.db
+   ```
+
+6. **Run database migrations:**
    ```bash
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
+   alembic upgrade head
+   ```
+
+7. **Run the server:**
+   ```bash
+   uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
 ## 📁 Project Structure
@@ -50,25 +71,52 @@ A FastAPI-based backend service that uses CrewAI agents to compare vehicles and 
 backend/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                 # FastAPI application entry point
-│   ├── crew.py                 # CrewAI orchestration
-│   ├── tasks.py                # Task definitions for agents
+│   ├── main.py                      # FastAPI application entry point
+│   ├── crew.py                      # OpenAI crew configuration
+│   ├── gemini_crew.py               # Gemini crew configuration
+│   ├── mock_crew.py                 # Fallback mock crew
+│   ├── tasks.py                     # Task definitions for agents
 │   ├── agents/
 │   │   ├── __init__.py
 │   │   ├── comparison_agent.py      # Vehicle comparison agent
 │   │   ├── ad_finder_agent.py       # Ad finding agent
-│   │   └── details_extractor_agent.py # Ad details extraction agent
+│   │   ├── details_extractor_agent.py # Ad details extraction agent
+│   │   └── mcp_enhanced_agent.py    # MCP enhanced agent (future)
 │   ├── tools/
 │   │   ├── __init__.py
-│   │   └── search_tool.py      # Serper search tool
+│   │   ├── search_tool.py           # Serper search tool
+│   │   ├── playwright_scraper.py    # Web scraping tool
+│   │   ├── playwright_tool.py       # Playwright integration
+│   │   └── mcp_openai_tool.py       # MCP OpenAI tool
 │   ├── schemas/
 │   │   ├── __init__.py
-│   │   └── vehicle_schemas.py  # Pydantic models
+│   │   └── vehicle_schemas.py       # Pydantic models
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── ad.py                    # SQLAlchemy Ad model
+│   ├── crud/
+│   │   ├── __init__.py
+│   │   └── ad_crud.py               # Ad CRUD operations
+│   ├── utils/
+│   │   └── ad_stats.py              # Ad statistics utilities
 │   └── core/
 │       ├── __init__.py
-│       └── config.py           # Configuration management
-├── requirements.txt
-├── .env                        # Environment variables (create this)
+│       ├── config.py                # Configuration management
+│       └── db.py                    # Database configuration
+├── scripts/
+│   ├── start_mcp_servers.py         # MCP server startup script
+│   └── warp-mcp.ps1                 # PowerShell MCP script
+├── alembic/                         # Database migrations (auto-generated)
+│   ├── versions/
+│   └── alembic.ini
+├── ads.db                           # SQLite database file
+├── requirements.txt                 # Python dependencies
+├── mcp-config.json                  # MCP configuration
+├── test_openai_connection.py        # OpenAI connection test
+├── test_gemini_direct.py            # Gemini connection test
+├── run.md                           # Quick run instructions
+├── llm_switch.md                    # LLM switching guide
+├── .env                             # Environment variables (create this)
 ├── .gitignore
 └── README.md
 ```

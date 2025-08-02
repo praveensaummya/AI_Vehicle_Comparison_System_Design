@@ -9,27 +9,55 @@ This document provides comprehensive entity-relationship information for the AI 
 ### Agentic System Flow
 
 1. **User Input** → Vehicle Analysis Request
-2. **CrewAI Agents Process** → Vehicle Comparison + Ad Finding + Details Extraction
-3. **System Output** → Vehicle Analysis Response
-4. **Data Storage** → SQLite Database (ads) + Future Vector DB Integration
+2. **LLM Provider Selection** → OpenAI (default) or Google Gemini (configurable)
+3. **CrewAI Agents Process** → Vehicle Comparison + Ad Finding + Details Extraction
+4. **Fallback System** → Mock agents on API failures for system stability
+5. **System Output** → Vehicle Analysis Response
+6. **Data Storage** → SQLite Database (ads) + Future Vector DB Integration
+
+### Current LLM Provider Configuration
+
+**Primary Provider**: OpenAI GPT-4o-mini (default)
+- Model: `gpt-4o-mini`
+- Environment: `OPENAI_API_KEY`, `OPENAI_MODEL_NAME`
+- Status: Fully functional and stable
+
+**Secondary Provider**: Google Gemini (configurable)
+- Model: `gemini-1.5-flash`
+- Environment: `GOOGLE_API_KEY`, `GEMINI_API_KEY`
+- Configuration: `OPENAI_MODEL_NAME="gemini/gemini-1.5-flash"`, `LITELLM_MODEL="gemini/gemini-1.5-flash"`
+- Status: Implemented with LiteLLM routing (Google AI Studio provider)
+- Known Issue: LiteLLM occasionally routes to Vertex AI instead of Google AI Studio
+
+**Fallback System**:
+- Mock agents activate on API failures
+- Provides sample data for system stability
+- Prevents complete system downtime
+- Logs fallback activation for monitoring
 
 ### Agent Workflow
 
 ```
 VehicleComparisonAgent (Expert Car Reviewer)
+├── LLM: OpenAI GPT-4o-mini / Gemini-1.5-flash (configurable)
 ├── Uses: SerperDevTool for web search
 ├── Output: Markdown-formatted comparison report
-└── Process: Technical specs, reliability, pros/cons analysis
+├── Process: Technical specs, reliability, pros/cons analysis
+└── Fallback: Mock comparison report on API failure
 
 SriLankanAdFinderAgent (Local Market Analyst)
+├── LLM: OpenAI GPT-4o-mini / Gemini-1.5-flash (configurable)
 ├── Uses: SerperDevTool for ikman.lk & riyasewana.com
 ├── Output: List of advertisement URLs
-└── Process: Searches for vehicle listings in Sri Lankan market
+├── Process: Searches for vehicle listings in Sri Lankan market
+└── Fallback: Mock ad URLs on API failure
 
 AdDetailsExtractorAgent (Ad Data Extractor)
+├── LLM: OpenAI GPT-4o-mini / Gemini-1.5-flash (configurable)
 ├── Uses: Playwright scraper for web scraping
 ├── Output: JSON objects with structured ad data
-└── Process: Extracts price, location, mileage, year from ad pages
+├── Process: Extracts price, location, mileage, year from ad pages
+└── Fallback: Mock ad details on API failure
 ```
 
 ## Entities
@@ -420,6 +448,164 @@ const validateVehicleInput = (vehicle: string): string | null => {
 - Social sharing
 - Advanced filtering
 
+## Technical Implementation Details
+
+### Backend Dependencies
+
+**Core Framework**:
+- `fastapi` - Web framework for API development
+- `uvicorn` - ASGI server for FastAPI
+- `pydantic` - Data validation and serialization
+
+**AI/ML Stack**:
+- `crewai==0.150.0` - Multi-agent orchestration framework
+- `litellm` - Unified LLM API interface
+- `langchain-openai` - OpenAI integration
+- `langchain-google-genai` - Google Gemini integration
+- `google-generativeai` - Direct Google Gemini API access
+
+**Web Scraping & Automation**:
+- `playwright` - Browser automation for ad scraping
+- `requests` - HTTP client for API calls
+- `beautifulsoup4>=4.12.0` - HTML parsing
+
+**Database & Storage**:
+- `SQLAlchemy` - ORM for database operations
+- `alembic` - Database migration management
+
+**Utilities & Configuration**:
+- `python-dotenv` - Environment variable management
+- `structlog` - Structured logging
+- `coloredlogs` - Enhanced log formatting
+- `click` - CLI tool development
+- `python-multipart` - Form data handling
+- `typing-extensions` - Extended type hints
+- `markdown` - Markdown processing
+
+### Environment Configuration
+
+**Required Environment Variables**:
+```bash
+# OpenAI Configuration (Primary)
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL_NAME=gpt-4o-mini
+
+# Google Gemini Configuration (Secondary)
+GOOGLE_API_KEY=your_google_api_key
+GEMINI_API_KEY=your_google_api_key  # Same as GOOGLE_API_KEY
+
+# LiteLLM Configuration (for Gemini routing)
+LITELLM_MODEL=gemini/gemini-1.5-flash
+LITELLM_LOG=DEBUG  # Optional: for debugging routing issues
+
+# Search Tool Configuration
+SERPER_API_KEY=your_serper_api_key
+
+# Database Configuration
+DATABASE_URL=sqlite:///./vehicle_analysis.db
+```
+
+**LLM Provider Switching**:
+To switch from OpenAI to Gemini:
+```bash
+# Clear OpenAI configuration
+unset OPENAI_API_KEY
+unset OPENAI_MODEL_NAME
+
+# Set Gemini configuration
+export OPENAI_MODEL_NAME="gemini/gemini-1.5-flash"
+export LITELLM_MODEL="gemini/gemini-1.5-flash"
+```
+
+### Deployment Considerations
+
+**Development Setup**:
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Install Playwright browsers
+playwright install
+
+# Run database migrations
+alembic upgrade head
+
+# Start development server
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Production Deployment**:
+- Use ASGI server (uvicorn, gunicorn with uvicorn workers)
+- Configure environment variables securely
+- Set up proper logging and monitoring
+- Implement rate limiting for API endpoints
+- Configure CORS for frontend integration
+- Use reverse proxy (nginx) for static file serving
+
+**Docker Configuration** (Future Enhancement):
+```dockerfile
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-driver \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Install Playwright browsers
+RUN playwright install chromium
+
+# Copy application code
+COPY . /app
+WORKDIR /app
+
+# Run migrations and start server
+CMD ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"]
+```
+
+### Performance Optimization
+
+**API Response Times**:
+- Expected response time: 30-60 seconds for full analysis
+- Implement request queuing for high load
+- Cache comparison reports for repeated requests
+- Async processing for independent agent tasks
+
+**Database Optimization**:
+- Index on `link` field for ad deduplication
+- Implement ad data cleanup/archival strategy
+- Consider read replicas for high-traffic scenarios
+
+**Memory Management**:
+- Monitor Playwright browser instances
+- Implement browser pool for concurrent scraping
+- Configure appropriate timeouts for web scraping
+
+### Error Handling & Monitoring
+
+**Error Categories**:
+1. **LLM API Errors**: Rate limits, authentication, model unavailability
+2. **Web Scraping Errors**: Site changes, network timeouts, blocked requests
+3. **Database Errors**: Connection issues, constraint violations
+4. **Agent Processing Errors**: Invalid responses, task failures
+
+**Monitoring Metrics**:
+- API response times and success rates
+- LLM token usage and costs
+- Web scraping success rates
+- Database query performance
+- Agent fallback activation frequency
+
+**Logging Strategy**:
+- Structured logging with `structlog`
+- Log levels: DEBUG (development), INFO (production)
+- Sensitive data masking (API keys, user inputs)
+- Request correlation IDs for tracing
+
 ## Testing Considerations
 
 ### Unit Tests
@@ -427,11 +613,21 @@ const validateVehicleInput = (vehicle: string): string | null => {
 - API integration
 - Data validation
 - Error handling
+- LLM provider switching logic
+- Mock agent functionality
 
 ### Integration Tests
 - End-to-end user flows
 - API endpoint testing
 - Cross-browser compatibility
+- Database migration testing
+- Agent workflow validation
+
+### Load Testing
+- Concurrent API requests
+- LLM API rate limit handling
+- Browser instance management
+- Database connection pooling
 
 ### Sample Test Data
 ```json
@@ -439,6 +635,12 @@ const validateVehicleInput = (vehicle: string): string | null => {
   "vehicle1": "Toyota Aqua",
   "vehicle2": "Honda Fit",
   "expected_ads_count": 5,
-  "expected_report_sections": ["Technical Specifications", "Reliability", "Pros and Cons"]
+  "expected_report_sections": ["Technical Specifications", "Reliability", "Pros and Cons"],
+  "test_scenarios": {
+    "openai_success": "Normal OpenAI operation",
+    "gemini_success": "Normal Gemini operation",
+    "api_failure": "Mock agent fallback activation",
+    "partial_failure": "Some agents succeed, others fail"
+  }
 }
 ```
