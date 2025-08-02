@@ -2,19 +2,21 @@
 """
 Database initialization script
 """
-from app.core.db import engine
-from app.models.ad import Ad
-from app.models.comparison import VehicleComparison
 
 def init_database():
     """Initialize database with all tables"""
     print("Creating database tables...")
     
-    # Import all models to register them with Base
-    from app.models import ad, comparison
+    # Import database engine and Base first
+    from app.core.db import engine, Base
+    
+    # Import all models to register them with Base - order matters!
+    from app.models.ad import Ad
+    from app.models.comparison import VehicleComparison
+    
+    print(f"Registered models: {Base.metadata.tables.keys()}")
     
     # Create all tables
-    from app.core.db import Base
     Base.metadata.create_all(bind=engine)
     
     print("Database tables created successfully!")

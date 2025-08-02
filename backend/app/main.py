@@ -2,9 +2,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from app.schemas.vehicle_schemas import VehicleAnalysisRequest, VehicleAnalysisResponse, AdDetails
-from app.crew import VehicleAnalysisCrew
 from app.gemini_crew import GeminiVehicleAnalysisCrew
-from app.mock_crew import MockVehicleAnalysisCrew
 from app.core.config import settings
 from app.utils.ad_stats import filter_and_stats
 import structlog
@@ -36,48 +34,29 @@ coloredlogs.install(level='INFO', logger=logging.getLogger())
 logger = structlog.get_logger()
 logger.info("Starting AI Vehicle Comparison System API")
 
-# Intelligent crew selection function
+# Simplified crew selection function
 async def _select_optimal_crew(vehicle1: str, vehicle2: str):
     """
-    Intelligently select the best available crew based on configuration and API availability
-    Priority: Gemini (free + generous) > OpenAI (paid) > Mock (fallback)
+    Select the Gemini crew for vehicle analysis
+    Uses the free Gemini API with generous quotas
     """
     
-    # Force mock mode if enabled
-    if settings.USE_MOCK_CREW:
-        logger.info("Using mock crew (forced by configuration)", 
-                   vehicle1=vehicle1, vehicle2=vehicle2, provider="mock")
-        return MockVehicleAnalysisCrew(vehicle1, vehicle2)
+    # Check if Gemini API key is configured
+    if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "your_gemini_api_key_here":
+        logger.error("Gemini API key not configured", 
+                    vehicle1=vehicle1, vehicle2=vehicle2)
+        raise ValueError("GEMINI_API_KEY is not properly configured. Please add your Gemini API key to the .env file.")
     
-    # Try Gemini first (preferred - free and generous quotas)
-    if settings.LLM_PROVIDER in ["gemini", "google-gemini"] or settings.LLM_PROVIDER == "auto":
-        if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY != "your_gemini_api_key_here":
-            try:
-                logger.info("Selecting Gemini crew (free tier with generous quotas)", 
-                           vehicle1=vehicle1, vehicle2=vehicle2, 
-                           provider="google-gemini", model=settings.GEMINI_MODEL)
-                return GeminiVehicleAnalysisCrew(vehicle1, vehicle2)
-            except Exception as e:
-                logger.warning("Gemini crew initialization failed, trying alternatives", 
-                              error=str(e), error_type=type(e).__name__)
-    
-    # Try OpenAI if Gemini not available or specified
-    if settings.LLM_PROVIDER == "openai" or settings.LLM_PROVIDER == "auto":
-        if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != "your_openai_api_key_here":
-            try:
-                logger.info("Selecting OpenAI crew (paid service)", 
-                           vehicle1=vehicle1, vehicle2=vehicle2, 
-                           provider="openai", model="gpt-3.5-turbo")
-                return VehicleAnalysisCrew(vehicle1, vehicle2)
-            except Exception as e:
-                logger.warning("OpenAI crew initialization failed, falling back to mock", 
-                              error=str(e), error_type=type(e).__name__)
-    
-    # Fallback to mock if no APIs available
-    logger.info("Using mock crew (no valid API keys found)", 
-               vehicle1=vehicle1, vehicle2=vehicle2, 
-               provider="mock", reason="fallback")
-    return MockVehicleAnalysisCrew(vehicle1, vehicle2)
+    try:
+        logger.info("Selecting Gemini crew (free tier with generous quotas)", 
+                   vehicle1=vehicle1, vehicle2=vehicle2, 
+                   provider="google-gemini", model=settings.GEMINI_MODEL)
+        return GeminiVehicleAnalysisCrew(vehicle1, vehicle2)
+    except Exception as e:
+        logger.error("Gemini crew initialization failed", 
+                    error=str(e), error_type=type(e).__name__,
+                    vehicle1=vehicle1, vehicle2=vehicle2)
+        raise
 
 app = FastAPI(
     title="AI Vehicle Analyst API",

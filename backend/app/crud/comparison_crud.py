@@ -8,11 +8,16 @@ def create_comparison(db: Session, vehicle1: str, vehicle2: str, comparison_repo
     """Create a new vehicle comparison report in the database."""
     metadata_json = json.dumps(metadata) if metadata else None
     
+    from uuid import uuid4
+
+    session_id = str(uuid4())  # Generate a unique session ID
+    
     db_comparison = VehicleComparison(
         vehicle1=vehicle1,
         vehicle2=vehicle2,
         comparison_report=comparison_report,
-        metadata_info=metadata_json
+        metadata_info=metadata_json,
+        analysis_session_id=session_id
     )
     db.add(db_comparison)
     db.commit()
@@ -57,3 +62,23 @@ def delete_comparison(db: Session, comparison_id: int) -> bool:
 def get_total_comparisons_count(db: Session) -> int:
     """Get total count of comparison reports in the database."""
     return db.query(VehicleComparison).count()
+
+def get_comparison_by_session_id(db: Session, analysis_session_id: str) -> Optional[VehicleComparison]:
+    """Get comparison by analysis session ID."""
+    return db.query(VehicleComparison).filter(VehicleComparison.analysis_session_id == analysis_session_id).first()
+
+def create_comparison_with_session_id(db: Session, analysis_session_id: str, vehicle1: str, vehicle2: str, comparison_report: str, metadata: dict = None):
+    """Create a new vehicle comparison with a specific session ID."""
+    metadata_json = json.dumps(metadata) if metadata else None
+    
+    db_comparison = VehicleComparison(
+        analysis_session_id=analysis_session_id,
+        vehicle1=vehicle1,
+        vehicle2=vehicle2,
+        comparison_report=comparison_report,
+        metadata_info=metadata_json
+    )
+    db.add(db_comparison)
+    db.commit()
+    db.refresh(db_comparison)
+    return db_comparison

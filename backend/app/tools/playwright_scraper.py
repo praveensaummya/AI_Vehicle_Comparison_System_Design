@@ -60,51 +60,46 @@ def extract_ad_details(url: str) -> dict:
         try:
             page.goto(url, timeout=60000)
             
-            # Enhanced selectors for Sri Lankan websites
+            # Enhanced selectors for ikman.lk
             title = (
                 page.text_content('h1') or 
-                page.text_content('.ad-title') or 
-                page.text_content('.title') or 
-                page.text_content('[data-testid="ad-title"]') or 
-                page.text_content('.listing-title') or
                 "Not Found"
             )
             
             price = (
-                page.text_content('.price') or 
-                page.text_content('.ad-price') or 
                 page.text_content('[data-testid="price"]') or 
-                page.text_content('.listing-price') or 
-                page.text_content('.amount') or
                 "Not Found"
             )
             
-            location = (
-                page.text_content('.location') or 
-                page.text_content('.ad-location') or 
-                page.text_content('[data-testid="location"]') or 
-                page.text_content('.city') or 
-                page.text_content('.area') or
-                "Not Found"
-            )
+            # For location, try both sublocation and parent location
+            sublocation = page.text_content('[data-testid="subtitle-sublocation-link"]')
+            parentlocation = page.text_content('[data-testid="subtitle-parentlocation-link"]')
             
-            mileage = (
-                page.text_content('.mileage') or 
-                page.text_content('.ad-mileage') or 
-                page.text_content('[data-testid="mileage"]') or 
-                page.text_content('.km') or 
-                page.text_content('.odometer') or
-                "Not Found"
-            )
+            if sublocation and parentlocation:
+                location = f"{sublocation.strip()}, {parentlocation.strip()}"
+            elif sublocation:
+                location = sublocation.strip()
+            elif parentlocation:
+                location = parentlocation.strip()
+            else:
+                location = "Not Found"
             
-            year = (
-                page.text_content('.year') or 
-                page.text_content('.ad-year') or 
-                page.text_content('[data-testid="year"]') or 
-                page.text_content('.model-year') or 
-                page.text_content('.manufacture-year') or
-                "Not Found"
-            )
+            # Extract mileage and year from ad metadata or page content
+            page_text = page.text_content('body')
+            
+            # Look for mileage in page content
+            mileage_match = re.search(r'(\d{1,3}(?:,\d{3})*|\d+)\s*km', page_text, re.IGNORECASE)
+            if mileage_match:
+                mileage = mileage_match.group(0)
+            else:
+                mileage = "Not Found"
+            
+            # Look for year in page content (4-digit year)
+            year_match = re.search(r'\b(19|20)\d{2}\b', page_text)
+            if year_match:
+                year = year_match.group(0)
+            else:
+                year = "Not Found"
             
         except PlaywrightTimeoutError:
             title = price = location = mileage = year = "Not Found"

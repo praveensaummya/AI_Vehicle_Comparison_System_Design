@@ -29,7 +29,19 @@ class AdDetailsExtractorTool(BaseTool):
             if not url_list:
                 return json.dumps([])
             
-            # For testing, return mock ad details
+            # Try to extract real ad details using Playwright scraper
+            try:
+                real_ad_details = batch_extract_ad_details(url_list)
+                if real_ad_details:
+                    # Filter out non-sale ads from the extracted details
+                    sale_ads_only = self._filter_sale_ads_from_details(real_ad_details)
+                    if sale_ads_only:
+                        return json.dumps(sale_ads_only, indent=2)
+            except Exception as scraping_error:
+                print(f"Real scraping failed: {scraping_error}")
+            
+            # Fallback to mock data only if real scraping fails
+            print(f"Warning: Real scraping failed for URLs, using mock data")
             mock_ad_details = []
             for i, url in enumerate(url_list):
                 vehicle_name = "Toyota Aqua" if "toyota-aqua" in url.lower() else "Honda Fit"

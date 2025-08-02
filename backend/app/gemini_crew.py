@@ -263,7 +263,7 @@ class GeminiVehicleAnalysisCrew:
         
         return crew
     
-    def _store_ads_in_database_safe(self, ads_data) -> list:
+    def _store_ads_in_database_safe(self, ads_data, analysis_session_id=None) -> list:
         """
         Store ads in the database with enhanced transaction management and deduplication.
         Returns list of successfully stored ads.
@@ -274,10 +274,15 @@ class GeminiVehicleAnalysisCrew:
         from app.core.db import SessionLocal
         from app.crud.ad_crud import create_ad, get_existing_ad_by_link
         from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+        from uuid import uuid4
         
         stored_ads = []
         failed_ads = []
         duplicate_ads = []
+        
+        # Generate session ID if not provided
+        if not analysis_session_id:
+            analysis_session_id = str(uuid4())
         
         db = SessionLocal()
         try:
@@ -295,6 +300,21 @@ class GeminiVehicleAnalysisCrew:
                     "link": ad.get("URL", "")
                 }
                 
+                # Determine vehicle name based on ad data or context
+                vehicle_name = None
+                if ad.get("vehicle_name"):
+                    vehicle_name = ad.get("vehicle_name")
+                else:
+                    # Try to determine from ad title or context
+                    title_lower = ad.get("Ad Title", "").lower()
+                    if "aqua" in title_lower or self.vehicle1.lower() in title_lower:
+                        vehicle_name = self.vehicle1
+                    elif "fit" in title_lower or self.vehicle2.lower() in title_lower:
+                        vehicle_name = self.vehicle2
+                    else:
+                        # Default to vehicle1 if we can't determine
+                        vehicle_name = self.vehicle1
+                
                 try:
                     # Check if ad already exists before attempting to create
                     existing_ad = get_existing_ad_by_link(db, ad_data["link"])
@@ -303,12 +323,16 @@ class GeminiVehicleAnalysisCrew:
                         self.logger.debug("Duplicate ad skipped", link=ad_data["link"])
                         continue
                     
-                    # Create new ad
-                    created_ad = create_ad(db, ad_data)
+                    # Create new ad WITH session tracking data
+                    created_ad = create_ad(db, ad_data, 
+                                         analysis_session_id=analysis_session_id, 
+                                         vehicle_name=vehicle_name)
                     stored_ads.append(created_ad)
-                    self.logger.info("Ad stored successfully", 
+                    self.logger.info("Ad stored successfully with session data", 
                                    title=ad_data["title"], 
-                                   link=ad_data["link"])
+                                   link=ad_data["link"],
+                                   session_id=analysis_session_id,
+                                   vehicle_name=vehicle_name)
                     
                 except IntegrityError as e:
                     db.rollback()
@@ -355,6 +379,231 @@ class GeminiVehicleAnalysisCrew:
         Legacy method - kept for backward compatibility.
         """
         return self._store_ads_in_database_safe(ads_data)
+    
+    def _extract_task_outputs(self, result):
+        """
+        Extract outputs from different crew result formats.
+        """
+        outputs = {}
+        
+        try:
+            # Handle CrewOutput object
+            if hasattr(result, 'tasks_output') and result.tasks_output:
+                task_outputs = result.tasks_output
+                self.logger.info(f"Processing {len(task_outputs)} task outputs")
+                
+                for i, task_output in enumerate(task_outputs):
+                    output_text = task_output.raw if hasattr(task_output, 'raw') else str(task_output)
+                    
+                    # Identify task type based on content and order
+                    if i == 0 or "#" in output_text or "comparison" in output_text.lower():
+                        outputs['comparison'] = output_text
+                    elif self._is_ads_json_data(output_text):
+                        # Determine which vehicle these ads belong to
+                        vehicle_key = f"vehicle{len([k for k in outputs.keys() if 'vehicle' in k]) + 1}_ads"
+                        outputs[vehicle_key] = output_text
+                        
+            # Handle legacy formats
+            elif hasattr(result, 'raw'):
+                outputs['comparison'] = result.raw if isinstance(result.raw, str) else str(result.raw)
+            elif isinstance(result, dict):
+                result_values = list(result.values())
+                if len(result_values) > 0:
+                    outputs['comparison'] = result_values[0]
+                if len(result_values) > 2:
+                    outputs['vehicle1_ads'] = result_values[2]
+                if len(result_values) > 4:
+                    outputs['vehicle2_ads'] = result_values[4]
+            elif isinstance(result, str):
+                outputs['comparison'] = result
+                
+        except Exception as e:
+            self.logger.warning(f"Error extracting task outputs: {str(e)}")
+            
+        return outputs
+    
+    def _is_ads_json_data(self, text: str) -> bool:
+        """
+        Check if text contains JSON ad data.
+        """
+        if not isinstance(text, str):
+            return False
+        
+        text_lower = text.lower()
+        return (('[' in text and ']' in text) and 
+                ('ad title' in text_lower or 'price' in text_lower or 'url' in text_lower))
+    
+    def _parse_and_validate_ads(self, ads_data) -> list:
+        """
+        Parse and validate ad data with enhanced error handling.
+        """
+        if not ads_data:
+            return []
+        
+        try:
+            # Handle different input formats
+            if isinstance(ads_data, list):
+                parsed_ads = ads_data
+            elif isinstance(ads_data, str):
+                parsed_ads = self._safe_json_loads(ads_data, [])
+            else:
+                self.logger.warning(f"Unexpected ads data type: {type(ads_data)}")
+                return []
+            
+            # Validate each ad entry
+            validated_ads = []
+            for ad in parsed_ads:
+                if isinstance(ad, dict) and self._validate_ad_data(ad):
+                    # Normalize ad data
+                    normalized_ad = self._normalize_ad_data(ad)
+                    validated_ads.append(normalized_ad)
+                else:
+                    self.logger.warning(f"Invalid ad data structure: {ad}")
+            
+            self.logger.info(f"Validated {len(validated_ads)} out of {len(parsed_ads)} ads")
+            return validated_ads
+            
+        except Exception as e:
+            self.logger.error(f"Failed to parse ads data: {str(e)}")
+            return []
+    
+    def _safe_json_loads(self, data, default_val):
+        """
+        Enhanced JSON parsing with multiple fallback strategies.
+        """
+        if not data:
+            return default_val
+            
+        try:
+            if isinstance(data, str):
+                # Clean up the JSON string with multiple strategies
+                cleaned_data = data.strip()
+                
+                # Remove markdown code blocks
+                if cleaned_data.startswith('```json'):
+                    cleaned_data = cleaned_data[7:]
+                elif cleaned_data.startswith('```'):
+                    cleaned_data = cleaned_data[3:]
+                    
+                if cleaned_data.endswith('```'):
+                    cleaned_data = cleaned_data[:-3]
+                
+                cleaned_data = cleaned_data.strip()
+                
+                # Try to extract JSON from mixed content
+                if not cleaned_data.startswith('[') and '[' in cleaned_data:
+                    start_idx = cleaned_data.find('[')
+                    end_idx = cleaned_data.rfind(']') + 1
+                    if start_idx >= 0 and end_idx > start_idx:
+                        cleaned_data = cleaned_data[start_idx:end_idx]
+                
+                return json.loads(cleaned_data)
+            elif isinstance(data, list):
+                return data
+            return default_val
+            
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            self.logger.warning(f"JSON parsing failed: {str(e)}", data_preview=str(data)[:200])
+            
+            # Try alternative parsing strategies
+            try:
+                # Attempt to fix common JSON issues
+                if isinstance(data, str):
+                    # Fix common issues like trailing commas, single quotes, etc.
+                    fixed_data = data.replace("'", '"').replace(',]', ']').replace(',}', '}')
+                    return json.loads(fixed_data)
+            except:
+                pass
+                
+            return default_val
+    
+    def _validate_ad_data(self, ad: dict) -> bool:
+        """
+        Validate that ad data contains required fields.
+        """
+        required_fields = ['Ad Title', 'URL']
+        return all(field in ad for field in required_fields)
+    
+    def _normalize_ad_data(self, ad: dict) -> dict:
+        """
+        Normalize ad data with consistent field formatting.
+        """
+        normalized = {
+            'Ad Title': str(ad.get('Ad Title', 'Not Found')).strip(),
+            'Price (in LKR)': self._normalize_price(ad.get('Price (in LKR)', 'Not Found')),
+            'Location': str(ad.get('Location', 'Not Found')).strip(),
+            'Mileage (in km)': self._normalize_mileage(ad.get('Mileage (in km)', 'Not Found')),
+            'Year of Manufacture': self._normalize_year(ad.get('Year of Manufacture', 'Not Found')),
+            'URL': str(ad.get('URL', '')).strip()
+        }
+        
+        return normalized
+    
+    def _normalize_price(self, price) -> str:
+        """
+        Normalize price formatting.
+        """
+        if not price or price == 'Not Found':
+            return 'Not Found'
+        
+        price_str = str(price).replace('Rs.', '').replace('LKR', '').replace(',', '').strip()
+        
+        try:
+            # Try to parse as number and reformat
+            price_num = float(price_str)
+            return f"{price_num:,.0f}"
+        except (ValueError, TypeError):
+            return str(price)
+    
+    def _normalize_mileage(self, mileage) -> str:
+        """
+        Normalize mileage formatting.
+        """
+        if not mileage or mileage == 'Not Found':
+            return 'Not Found'
+        
+        mileage_str = str(mileage).replace('km', '').replace(',', '').strip()
+        
+        try:
+            # Try to parse as number
+            mileage_num = float(mileage_str)
+            return f"{mileage_num:,.0f} km"
+        except (ValueError, TypeError):
+            return str(mileage)
+    
+    def _normalize_year(self, year) -> str:
+        """
+        Normalize year formatting.
+        """
+        if not year or year == 'Not Found':
+            return 'Not Found'
+        
+        try:
+            year_num = int(float(str(year)))
+            if 1900 <= year_num <= 2030:
+                return str(year_num)
+            else:
+                return 'Not Found'
+        except (ValueError, TypeError):
+            return 'Not Found'
+    
+    def _convert_to_ad_details_format(self, ads_data):
+        """
+        Convert the agent output format to AdDetails format
+        """
+        converted_ads = []
+        for ad in ads_data:
+            if isinstance(ad, dict):
+                converted_ad = {
+                    "title": ad.get("Ad Title", "Not Found"),
+                    "price": ad.get("Price (in LKR)", "Not Found"),
+                    "location": ad.get("Location", "Not Found"),
+                    "mileage": ad.get("Mileage (in km)", "Not Found"),
+                    "year": str(ad.get("Year of Manufacture", "Not Found")),
+                    "link": ad.get("URL", "Not Found")
+                }
+                converted_ads.append(converted_ad)
+        return converted_ads
     def _store_comparison_in_database(self, vehicle1, vehicle2, comparison_report, metadata):
         """
         Store the comparison report in the database.
@@ -475,22 +724,33 @@ class GeminiVehicleAnalysisCrew:
             # Parse ad results (skip comparison parsing since it's already stored)
             parsed_results = self._extract_task_outputs(result) if result else {}
             
+            # Generate unique analysis session ID FIRST
+            from uuid import uuid4
+            analysis_session_id = str(uuid4())
+            
             # Extract ad data with intelligent parsing
             vehicle1_ads = self._parse_and_validate_ads(parsed_results.get('vehicle1_ads', []))
             vehicle2_ads = self._parse_and_validate_ads(parsed_results.get('vehicle2_ads', []))
             
-            # Store ads in database with improved transaction handling
-            stored_ads = self._store_ads_in_database_safe(vehicle1_ads + vehicle2_ads)
-            self.logger.info(f"Successfully stored {len(stored_ads)} ads in database")
+            # Store ads in database with session ID for tracking
+            stored_ads = self._store_ads_in_database_safe(vehicle1_ads + vehicle2_ads, analysis_session_id)
+            self.logger.info(f"Successfully stored {len(stored_ads)} ads in database with session tracking")
             
             # Convert to expected API format
             vehicle1_ads_formatted = self._convert_to_ad_details_format(vehicle1_ads)
             vehicle2_ads_formatted = self._convert_to_ad_details_format(vehicle2_ads)
+            
+            # Add session ID and vehicle name to each ad
+            self._add_session_data_to_ads(vehicle1_ads_formatted, analysis_session_id, self.vehicle1)
+            self._add_session_data_to_ads(vehicle2_ads_formatted, analysis_session_id, self.vehicle2)
 
             return {
+                "analysis_session_id": analysis_session_id,
                 "comparison_report": comparison_report,  # Use pre-stored comparison
                 "vehicle1_ads": vehicle1_ads_formatted,
                 "vehicle2_ads": vehicle2_ads_formatted,
+                "vehicle1_name": self.vehicle1,
+                "vehicle2_name": self.vehicle2,
                 "metadata": {
                     "total_ads_found": len(vehicle1_ads) + len(vehicle2_ads),
                     "ads_stored": len(stored_ads),
@@ -502,10 +762,17 @@ class GeminiVehicleAnalysisCrew:
             
         except Exception as e:
             self.logger.error(f"Failed to parse ad results: {str(e)}", exc_info=True)
+            # Generate a unique analysis session ID even for errors
+            from uuid import uuid4
+            analysis_session_id = str(uuid4())
+            
             return {
+                "analysis_session_id": analysis_session_id,
                 "comparison_report": comparison_report,  # Still return the stored comparison
                 "vehicle1_ads": [],
                 "vehicle2_ads": [],
+                "vehicle1_name": self.vehicle1,
+                "vehicle2_name": self.vehicle2,
                 "metadata": {
                     "total_ads_found": 0,
                     "ads_stored": 0,
@@ -574,3 +841,10 @@ class GeminiVehicleAnalysisCrew:
                     "llm_provider": "google-gemini"
                 }
             }
+    
+    def _add_session_data_to_ads(self, ads_list, analysis_session_id, vehicle_name):
+        """Add session ID and vehicle name to each ad in the list"""
+        for ad in ads_list:
+            if isinstance(ad, dict):
+                ad['analysis_session_id'] = analysis_session_id
+                ad['vehicle_name'] = vehicle_name
