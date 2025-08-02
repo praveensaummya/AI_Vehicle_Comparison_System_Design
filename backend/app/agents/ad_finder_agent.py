@@ -1,6 +1,7 @@
 # app/agents/ad_finder_agent.py
 from crewai import Agent
-from app.tools.search_tool import search_tool # Import the tool instance
+from app.tools.search_tool import search_tool
+from app.tools.sri_lankan_scraper import sri_lankan_scraper_tool
 
 class SriLankanAdFinderAgent:
     def ad_finder(self, llm=None) -> Agent:
@@ -29,7 +30,7 @@ class SriLankanAdFinderAgent:
                 "AVOID search pages that contain 'search/', 'ads/sri-lanka/', or '/cars/honda/fit' "
                 "as these are category pages, not individual advertisements."
             ),
-            "tools": [search_tool], # Assign the new Serper tool
+            "tools": [search_tool, sri_lankan_scraper_tool], # Assign search and Sri Lankan scraper tools
             "allow_delegation": False,
             "verbose": True
         }

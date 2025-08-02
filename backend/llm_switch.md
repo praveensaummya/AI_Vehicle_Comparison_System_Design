@@ -1,56 +1,115 @@
-# Switching LLM Modules
+# AI Vehicle Comparison System - LLM Provider Switching Guide
 
-This guide outlines how to switch or integrate different LLM (Large Language Model) modules within your agentic system.
+This comprehensive guide explains the intelligent LLM (Large Language Model) switching system implemented in the AI Vehicle Comparison platform. The system automatically selects the best available LLM provider based on configuration, API availability, and cost optimization.
 
-## Current Setup
+## System Overview
 
-- **Current LLM**: OpenAI using `langchain-openai` and the `ChatOpenAI` class.
-- **Current Config**: Update LLM settings in `app/core/config.py`.
+The AI Vehicle Comparison System implements an intelligent, production-ready LLM switching architecture that provides:
 
-## Steps to Switch or Add LLM Modules
+- **Multi-Provider Support**: Google Gemini (primary), OpenAI (fallback), Mock agents (development/testing)
+- **Automatic Failover**: Seamless switching between providers based on availability
+- **Cost Optimization**: Prioritizes free-tier models (Gemini) over paid services (OpenAI)
+- **Environment-Driven Configuration**: Zero-code provider switching via environment variables
+- **Production Resilience**: Graceful fallback to mock agents if all APIs fail
 
-1. **Identify and Choose New LLM Provider**
-   - Options include Hugging Face Transformers, other OpenAI models, etc.
-   - Ensure the chosen provider offers the models and features required.
+## Current Architecture
 
-2. **Install Necessary Libraries**
-   - Update your `requirements.txt` with libraries for the new LLM.
-   - Example: For Hugging Face, add `transformers`, `torch`, etc.
+### Provider Priority (Intelligent Selection)
 
-3. **Modify Configuration**
-   - Update the `app/core/config.py` with credentials or API keys.
-   - Example: Add `HUGGINGFACE_API_KEY` to your environment and access it similarly.
+1. **Google Gemini 1.5 Flash** (Primary - Free Tier)
+   - **Cost**: Free with generous quotas (15 requests/minute, 1500 requests/day)
+   - **Performance**: Fast response times, optimized for real-time applications
+   - **Context**: 1M token context window
+   - **Best For**: Production workloads, high-frequency requests, cost-sensitive deployments
 
-4. **Update Agent Code**
-   - Modify agents like `VehicleComparisonAgent` and crew modules to use the new LLM.
-   - Instantiate these LLMs through their respective APIs or SDKs.
+2. **OpenAI GPT-3.5-Turbo** (Secondary - Paid)
+   - **Cost**: Pay-per-use ($0.0015/1K input tokens, $0.002/1K output tokens)
+   - **Performance**: Excellent quality and reliability
+   - **Context**: 16K token context window
+   - **Best For**: Enterprise deployments, guaranteed availability, premium features
 
-5. **Testing and Validation**
-   - Create or update unit tests validating changes.
-   - Test each agent workflow and ensure the interactions generate expected outputs.
+3. **Mock Agents** (Fallback - Local)
+   - **Cost**: Free (no API calls)
+   - **Performance**: Instant responses with realistic data
+   - **Context**: Pre-generated comprehensive responses
+   - **Best For**: Development, testing, API outages, demonstration purposes
 
-6. **Considerations for Performance**
-   - Ensure efficient API call management to minimize latency and costs.
-   - Optimize LLM usage for responses by pruning unnecessary data processing.
+### Implementation Components
 
-## Example Update for New LLM
+```
+Backend Architecture:
+├── app/main.py                 # Intelligent crew selection logic
+├── app/core/config.py          # Environment-driven configuration
+├── app/crew.py                 # OpenAI-powered crew (legacy/fallback)
+├── app/gemini_crew.py          # Gemini-powered crew (primary)
+├── app/mock_crew.py            # Mock crew (development/fallback)
+└── app/agents/                 # Flexible agent implementations
+    ├── comparison_agent.py     # Vehicle comparison specialist
+    ├── ad_finder_agent.py      # Sri Lankan marketplace ad finder
+    └── details_extractor_agent.py  # Ad details extraction agent
+```
 
-### Hugging Face Example
+## Intelligent Crew Selection Logic
 
-- **Config Update**:
-  ```python
-  class Settings:
-      # Add new LLM API keys
-      HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
-  ```
+The system uses a sophisticated selection algorithm in `app/main.py` that automatically chooses the optimal LLM provider:
 
-- **Agent Update**:
-  Example for using Hugging Face:
-  ```python
-  from transformers import pipeline
-  # Set up pipeline
-  classifier = pipeline('sentiment-analysis', api_key=settings.HUGGINGFACE_API_KEY)
-  ```
+```python
+# app/main.py - Intelligent crew selection function
+async def _select_optimal_crew(vehicle1: str, vehicle2: str):
+    """
+    Intelligently select the best available crew based on configuration and API availability
+    Priority: Gemini (free + generous) > OpenAI (paid) > Mock (fallback)
+    """
+    
+    # Force mock mode if enabled
+    if settings.USE_MOCK_CREW:
+        logger.info("Using mock crew (forced by configuration)")
+        return MockVehicleAnalysisCrew(vehicle1, vehicle2)
+    
+    # Try Gemini first (preferred - free and generous quotas)
+    if settings.LLM_PROVIDER in ["gemini", "google-gemini"] or settings.LLM_PROVIDER == "auto":
+        if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY != "your_gemini_api_key_here":
+            try:
+                logger.info("Selecting Gemini crew (free tier with generous quotas)")
+                return GeminiVehicleAnalysisCrew(vehicle1, vehicle2)
+            except Exception as e:
+                logger.warning("Gemini crew initialization failed, trying alternatives")
+    
+    # Try OpenAI if Gemini not available or specified
+    if settings.LLM_PROVIDER == "openai" or settings.LLM_PROVIDER == "auto":
+        if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != "your_openai_api_key_here":
+            try:
+                logger.info("Selecting OpenAI crew (paid service)")
+                return VehicleAnalysisCrew(vehicle1, vehicle2)
+            except Exception as e:
+                logger.warning("OpenAI crew initialization failed, falling back to mock")
+    
+    # Fallback to mock if no APIs available
+    logger.info("Using mock crew (no valid API keys found)")
+    return MockVehicleAnalysisCrew(vehicle1, vehicle2)
+```
+
+### Error Handling and Resilience
+
+The system includes comprehensive error handling with automatic fallback:
+
+```python
+# Automatic API error detection and fallback
+is_api_error = (
+    "quota" in error_msg.lower() or 
+    "rate limit" in error_msg.lower() or 
+    "RateLimitError" in str(type(e).__name__) or
+    "supports_stop_words" in error_msg or  # CrewAI compatibility issue
+    "DefaultCredentialsError" in error_msg or  # Vertex AI auth issue
+    "APIConnectionError" in str(type(e).__name__)  # General API connection error
+)
+
+if is_api_error:
+    logger.warning("API error detected, falling back to mock crew")
+    # Automatic fallback to mock crew
+    mock_crew = MockVehicleAnalysisCrew(request.vehicle1, request.vehicle2)
+    result = mock_crew.run()
+```
 
 ## Switching to Google Gemini Models
 
@@ -73,24 +132,33 @@ This guide outlines how to switch or integrate different LLM (Large Language Mod
    pip install langchain-google-genai google-generativeai
    ```
 
-### Configuration Updates
+## Current Production Configuration
 
-**Update `app/core/config.py`**:
+### Active Configuration (`app/core/config.py`)
+
+The current production system uses the following configuration:
+
 ```python
-# app/core/config.py
+# app/core/config.py - Current Production Implementation
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class Settings:
-    # LLM and Agent Configuration
+    # LLM Provider Configuration
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()  # gemini, openai, or mock
+    
+    # OpenAI Configuration (legacy support)
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")  # Add this line
     
-    # LLM Model Selection
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai, gemini-flash, gemini-pro
+    # Gemini Configuration (primary)
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")  # Free tier model
     
+    # Mock Mode Configuration (for testing without API calls)
+    USE_MOCK_CREW = os.getenv("USE_MOCK_CREW", "false").lower() == "true"
+
     # Tool Configuration
     SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
@@ -98,8 +166,27 @@ settings = Settings()
 
 # Set environment variables for CrewAI tools
 os.environ["SERPER_API_KEY"] = settings.SERPER_API_KEY
-if settings.GOOGLE_API_KEY:
-    os.environ["GOOGLE_API_KEY"] = settings.GOOGLE_API_KEY
+```
+
+### Current Environment Variables
+
+**Production-Ready `.env` Configuration**:
+```env
+# Primary LLM Provider (Default: Gemini for cost optimization)
+LLM_PROVIDER=gemini  # Options: gemini, openai, auto, mock
+
+# Google Gemini Configuration (Primary - Free Tier)
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-1.5-flash  # Options: gemini-1.5-flash, gemini-1.5-pro
+
+# OpenAI Configuration (Fallback - Paid)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Mock Mode (Development/Testing)
+USE_MOCK_CREW=false  # Set to "true" for development without API calls
+
+# Search Tool Configuration
+SERPER_API_KEY=your_serper_api_key_here
 ```
 
 **Update your `.env` file**:
@@ -310,21 +397,282 @@ python test_gemini.py
        return ChatOpenAI(...)
    ```
 
+## Current Gemini Implementation Details
+
+### Gemini Crew Implementation (`app/gemini_crew.py`)
+
+The current production system uses an optimized Gemini crew with enhanced error handling:
+
+```python
+# Key features of the current Gemini implementation:
+
+1. **Environment Variable Routing**: 
+   - Uses LiteLLM format: "gemini/gemini-1.5-flash"
+   - Forces Google AI Studio (prevents Vertex AI routing)
+   - Clears conflicting environment variables
+
+2. **API Key Validation**:
+   - Comprehensive validation with detailed error messages
+   - Direct connection test to verify API key works
+   - Clear guidance for obtaining API keys
+
+3. **CrewAI Integration**:
+   - Environment-driven LLM configuration (no explicit LLM objects)
+   - Avoids compatibility issues with CrewAI's internal LLM handling
+   - Optimized crew settings (cache enabled, memory disabled)
+
+4. **Error Resilience**:
+   - Automatic fallback to OpenAI/Mock crews on failure
+   - Comprehensive error detection and logging
+   - Production-ready error handling
+```
+
+### Provider-Specific Optimizations
+
+**Gemini Crew Optimizations**:
+- **Cache**: Enabled (Gemini benefits from caching)
+- **Memory**: Disabled (better performance)
+- **Model**: gemini-1.5-flash (free tier, fast)
+- **Environment**: Google AI Studio (not Vertex AI)
+
+**OpenAI Crew Optimizations**:
+- **Cache**: Disabled (fresh results preferred)
+- **Memory**: Disabled (faster execution)
+- **Model**: gpt-3.5-turbo (cost-effective)
+- **Environment**: Direct OpenAI API
+
+**Mock Crew Features**:
+- **Instant responses**: No API delays
+- **Realistic data**: Comprehensive mock comparisons
+- **Consistent output**: Predictable for testing
+- **Full feature parity**: Complete vehicle analysis simulation
+
+### Usage Patterns and Best Practices
+
+#### Development Workflow
+
+1. **Local Development**:
+   ```env
+   USE_MOCK_CREW=true  # Fast development without API costs
+   LLM_PROVIDER=mock
+   ```
+
+2. **Testing with Real APIs**:
+   ```env
+   USE_MOCK_CREW=false
+   LLM_PROVIDER=gemini  # Free tier for testing
+   GEMINI_API_KEY=your_key_here
+   ```
+
+3. **Production Deployment**:
+   ```env
+   LLM_PROVIDER=auto  # Intelligent selection
+   GEMINI_API_KEY=your_gemini_key
+   OPENAI_API_KEY=your_openai_key  # Fallback
+   USE_MOCK_CREW=false
+   ```
+
+#### API Health Monitoring
+
+The system includes built-in health checks:
+
+```python
+# Available endpoints for monitoring:
+
+GET /api/v1/health  # Overall system health
+# Returns:
+{
+    "status": "healthy",
+    "services": {
+        "api": "operational",
+        "openai_configured": true,
+        "serper_configured": true,
+        "mock_mode": false
+    }
+}
+
+POST /api/v1/test-openai  # Test OpenAI connectivity
+# Returns API status, quota information, and suggestions
+```
+
+### Switching Providers at Runtime
+
+#### Quick Provider Switch
+
+**Switch to Gemini (Free)**:
+```bash
+# Update .env file
+echo "LLM_PROVIDER=gemini" >> .env
+echo "GEMINI_API_KEY=your_key_here" >> .env
+
+# Restart backend
+uvicorn app.main:app --reload
+```
+
+**Switch to OpenAI (Paid)**:
+```bash
+# Update .env file
+echo "LLM_PROVIDER=openai" >> .env
+echo "OPENAI_API_KEY=your_key_here" >> .env
+
+# Restart backend
+uvicorn app.main:app --reload
+```
+
+**Enable Mock Mode (Development)**:
+```bash
+# Update .env file
+echo "USE_MOCK_CREW=true" >> .env
+
+# Restart backend (no API keys needed)
+uvicorn app.main:app --reload
+```
+
+### Cost Optimization Strategies
+
+1. **Development Phase**:
+   - Use `USE_MOCK_CREW=true` for UI development
+   - Switch to Gemini for integration testing
+   - Minimize API calls during development
+
+2. **Production Phase**:
+   - Primary: Gemini (free tier, 1500 requests/day)
+   - Fallback: OpenAI (paid, guaranteed availability)
+   - Emergency: Mock crew (system always available)
+
+3. **Scaling Considerations**:
+   - Monitor Gemini quota usage
+   - Implement request caching for repeated queries
+   - Consider Gemini Pro for high-quality requirements
+   - Load balance between multiple API keys if needed
+
+### Troubleshooting Common Issues
+
+#### Gemini API Issues
+
+```bash
+# Issue: "supports_stop_words" error
+# Solution: Use environment-driven configuration (current implementation)
+
+# Issue: Vertex AI authentication error
+# Solution: Clear Google Cloud credentials (implemented in gemini_crew.py)
+
+# Issue: Rate limiting
+# Solution: Automatic fallback to OpenAI/Mock crews
+```
+
+#### OpenAI API Issues
+
+```bash
+# Issue: Quota exceeded
+# Solution: System automatically falls back to mock crew
+
+# Issue: Invalid API key
+# Solution: Check /api/v1/test-openai endpoint for diagnosis
+
+# Issue: Network connectivity
+# Solution: Automatic fallback to mock crew maintains service
+```
+
 ### Migration Checklist
 
-- [ ] Install required dependencies
-- [ ] Obtain Google AI API key
-- [ ] Update configuration files
-- [ ] Create LLM factory
-- [ ] Update crew initialization
-- [ ] Test with sample requests
-- [ ] Monitor performance and costs
+**Current System (Already Implemented)**:
+- [x] Multi-provider architecture
+- [x] Intelligent crew selection
+- [x] Environment-driven configuration
+- [x] Automatic error handling and fallback
+- [x] Production-ready Gemini integration
+- [x] Comprehensive logging and monitoring
+- [x] Mock crew for development/testing
+- [x] API health check endpoints
+
+**For Adding New Providers**:
+- [ ] Create new crew class (follow gemini_crew.py pattern)
+- [ ] Add provider configuration to config.py
+- [ ] Update intelligent selection logic in main.py
+- [ ] Add provider-specific optimizations
+- [ ] Implement error handling and fallback
+- [ ] Add health check endpoints
 - [ ] Update documentation
+- [ ] Test thoroughly with real API calls
 
-## Final Steps
+## Advanced Configuration
 
-- Document changes and configurations.
-- Provide training or walkthroughs for team members to handle updates.
+### Custom LLM Factory (Alternative Approach)
+
+If you prefer explicit LLM instantiation over environment-driven configuration:
+
+```python
+# app/core/llm_factory.py - Alternative implementation
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
+from app.core.config import settings
+import structlog
+
+class LLMFactory:
+    @staticmethod
+    def create_llm(provider: str = None):
+        """Create LLM with explicit provider override"""
+        provider = provider or settings.LLM_PROVIDER
+        logger = structlog.get_logger()
+        
+        try:
+            if provider == "gemini":
+                return ChatGoogleGenerativeAI(
+                    model=settings.GEMINI_MODEL,
+                    google_api_key=settings.GEMINI_API_KEY,
+                    temperature=0.1
+                )
+            elif provider == "openai":
+                return ChatOpenAI(
+                    model="gpt-3.5-turbo",
+                    api_key=settings.OPENAI_API_KEY,
+                    temperature=0.1
+                )
+            else:
+                logger.warning(f"Unknown provider {provider}, using OpenAI")
+                return ChatOpenAI(
+                    model="gpt-3.5-turbo",
+                    api_key=settings.OPENAI_API_KEY,
+                    temperature=0.1
+                )
+        except Exception as e:
+            logger.error(f"Failed to create {provider} LLM: {e}")
+            raise
+```
+
+### Enterprise Deployment Considerations
+
+1. **Load Balancing**:
+   - Multiple API keys for higher quotas
+   - Round-robin selection between keys
+   - Health checking of individual keys
+
+2. **Monitoring and Alerting**:
+   - API usage tracking
+   - Cost monitoring and alerts
+   - Performance metrics and dashboards
+
+3. **Security**:
+   - API key rotation policies
+   - Environment variable encryption
+   - Access logging and audit trails
+
+4. **Scaling**:
+   - Horizontal scaling with consistent provider selection
+   - Database-driven configuration for multi-instance deployments
+   - Centralized logging and monitoring
 
 ---
-By following this guide, you can effectively switch or integrate new LLM modules into your existing system.
+
+## Summary
+
+The AI Vehicle Comparison System implements a sophisticated, production-ready LLM switching architecture that:
+
+- **Prioritizes cost optimization** by using free-tier Gemini as primary provider
+- **Ensures reliability** through automatic fallback to paid OpenAI service
+- **Maintains availability** with mock crew fallback for development and outages
+- **Simplifies deployment** through environment-driven configuration
+- **Provides monitoring** with comprehensive health checks and logging
+
+This architecture enables zero-downtime provider switching, cost-effective operation, and reliable service delivery while maintaining flexibility for future LLM provider integrations.

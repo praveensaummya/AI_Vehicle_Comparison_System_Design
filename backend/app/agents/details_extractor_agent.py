@@ -1,6 +1,7 @@
 # app/agents/details_extractor_agent.py
 from crewai import Agent
 from app.tools.search_tool import search_tool
+from app.tools.ad_details_tool import ad_details_extractor_tool
 from app.tools.playwright_scraper import batch_extract_ad_details
 
 class AdDetailsExtractorAgent:
@@ -24,7 +25,7 @@ class AdDetailsExtractorAgent:
                 "You apply contextual intelligence to convert abbreviated mileage "
                 "figures into their proper full values."
             ),
-            "tools": [search_tool],
+            "tools": [ad_details_extractor_tool],
             "allow_delegation": False,
             "verbose": True
         }

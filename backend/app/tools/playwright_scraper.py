@@ -59,28 +59,70 @@ def extract_ad_details(url: str) -> dict:
         page = browser.new_page()
         try:
             page.goto(url, timeout=60000)
-            # TODO: Adjust selectors for each site as needed!
-            title = page.text_content('h1, .ad-title, .title') or "Not Found"
-            price = page.text_content('.price, .ad-price, [data-testid=\"ad-price\"]') or "Not Found"
-            location = page.text_content('.location, .ad-location') or "Not Found"
-            mileage = page.text_content('.mileage, .ad-mileage') or "Not Found"
-            year = page.text_content('.year, .ad-year') or "Not Found"
+            
+            # Enhanced selectors for Sri Lankan websites
+            title = (
+                page.text_content('h1') or 
+                page.text_content('.ad-title') or 
+                page.text_content('.title') or 
+                page.text_content('[data-testid="ad-title"]') or 
+                page.text_content('.listing-title') or
+                "Not Found"
+            )
+            
+            price = (
+                page.text_content('.price') or 
+                page.text_content('.ad-price') or 
+                page.text_content('[data-testid="price"]') or 
+                page.text_content('.listing-price') or 
+                page.text_content('.amount') or
+                "Not Found"
+            )
+            
+            location = (
+                page.text_content('.location') or 
+                page.text_content('.ad-location') or 
+                page.text_content('[data-testid="location"]') or 
+                page.text_content('.city') or 
+                page.text_content('.area') or
+                "Not Found"
+            )
+            
+            mileage = (
+                page.text_content('.mileage') or 
+                page.text_content('.ad-mileage') or 
+                page.text_content('[data-testid="mileage"]') or 
+                page.text_content('.km') or 
+                page.text_content('.odometer') or
+                "Not Found"
+            )
+            
+            year = (
+                page.text_content('.year') or 
+                page.text_content('.ad-year') or 
+                page.text_content('[data-testid="year"]') or 
+                page.text_content('.model-year') or 
+                page.text_content('.manufacture-year') or
+                "Not Found"
+            )
+            
         except PlaywrightTimeoutError:
             title = price = location = mileage = year = "Not Found"
         except Exception as e:
             title = price = location = mileage = year = f"Error: {e}"
         finally:
             browser.close()
+            
         # Apply intelligent mileage interpretation
         processed_mileage = interpret_mileage(mileage) if mileage else "Not Found"
         
         return {
-            "title": title.strip() if title else "Not Found",
-            "price": price.strip() if price else "Not Found",
-            "location": location.strip() if location else "Not Found",
-            "mileage": processed_mileage,
-            "year": year.strip() if year else "Not Found",
-            "link": url
+            "Ad Title": title.strip() if title else "Not Found",
+            "Price (in LKR)": price.strip() if price else "Not Found",
+            "Location": location.strip() if location else "Not Found",
+            "Mileage (in km)": processed_mileage,
+            "Year of Manufacture": year.strip() if year else "Not Found",
+            "URL": url
         }
 
 def batch_extract_ad_details(urls: list) -> list:

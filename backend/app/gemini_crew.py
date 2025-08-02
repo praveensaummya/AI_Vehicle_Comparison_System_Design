@@ -97,8 +97,52 @@ class GeminiVehicleAnalysisCrew:
                         model=settings.GEMINI_MODEL,
                         provider="google-gemini")
 
+    def _clean_and_store_comparison_report(self, raw_report):
+        """
+        Clean and store the comparison report in the database.
+        """
+        clean_report = self._clean_comparison_report(raw_report)
+        self._store_comparison_in_database(
+            self.vehicle1,
+            self.vehicle2,
+            clean_report,
+            {}
+        )
+
+    def _clean_comparison_report(self, report):
+        """
+        Clean and normalize the comparison report before storing in database.
+        """
+        if not report or not isinstance(report, str):
+            return "No comparison report available."
+        
+        # Remove extra whitespace and normalize line breaks
+        clean_report = report.strip()
+        
+        # Remove markdown code blocks if present
+        if clean_report.startswith('```'):
+            lines = clean_report.split('\n')
+            clean_report = '\n'.join(lines[1:-1]) if len(lines) > 2 else clean_report
+        
+        # Normalize excessive whitespace
+        import re
+        clean_report = re.sub(r'\n\s*\n', '\n\n', clean_report)  # Normalize paragraph breaks
+        clean_report = re.sub(r' +', ' ', clean_report)  # Remove extra spaces
+        
+        # Ensure proper vehicle name formatting
+        clean_report = clean_report.replace(self.vehicle1.lower(), self.vehicle1)
+        clean_report = clean_report.replace(self.vehicle2.lower(), self.vehicle2)
+        
+        # Remove any emojis or special characters that might cause DB issues
+        clean_report = re.sub(r'[^\w\s\n.,;:!?()\[\]{}"\'-]', '', clean_report)
+        
+        self.logger.info("Comparison report cleaned", 
+                        original_length=len(report), 
+                        cleaned_length=len(clean_report))
+        
+        return clean_report.strip()
+
     def run(self):
-        """Optimized Gemini crew execution"""
         try:
             self.logger.info("Starting Gemini-powered crew execution", 
                            vehicles=[self.vehicle1, self.vehicle2],
@@ -109,24 +153,28 @@ class GeminiVehicleAnalysisCrew:
             agents = self._create_gemini_agents()
             self.logger.info("Gemini agents created successfully", agent_count=len(agents))
 
-            # 2. Create tasks optimized for Gemini
-            self.logger.info("Creating Gemini-optimized tasks")
-            tasks = self._create_gemini_tasks(agents)
-            self.logger.info("Gemini tasks created successfully", task_count=len(tasks))
+            # 2. Execute comparison task first and store immediately
+            self.logger.info("Executing comparison task first")
+            comparison_report = self._execute_comparison_task_and_store(agents)
+            
+            # 3. Create remaining tasks (ad finding and extraction)
+            self.logger.info("Creating ad finding and extraction tasks")
+            tasks = self._create_ad_tasks(agents)
+            self.logger.info("Ad tasks created successfully", task_count=len(tasks))
 
-            # 3. Assemble Gemini crew
-            self.logger.info("Assembling Gemini crew")
+            # 4. Assemble crew for ad processing
+            self.logger.info("Assembling crew for ad processing")
             crew = self._create_gemini_crew(agents, tasks)
-            self.logger.info("Gemini crew assembled successfully")
+            self.logger.info("Ad processing crew assembled successfully")
 
-            # 4. Execute with Gemini
-            self.logger.info("Executing Gemini crew workflow")
-            result = crew.kickoff()
-            self.logger.info("Gemini crew execution completed")
+            # 5. Execute ad finding and extraction
+            self.logger.info("Executing ad finding and extraction workflow")
+            result = crew.kickoff() if tasks else None
+            self.logger.info("Ad processing crew execution completed")
 
-            # 5. Process results
-            self.logger.info("Processing Gemini crew results")
-            final_output = self._parse_crew_result(result)
+            # 6. Process ad results and combine with stored comparison
+            self.logger.info("Processing ad results")
+            final_output = self._parse_crew_result_with_comparison(result, comparison_report)
             
             self.logger.info("Gemini analysis completed successfully", 
                            comparison_generated=bool(final_output.get('comparison_report')),
@@ -214,36 +262,315 @@ class GeminiVehicleAnalysisCrew:
                         cache_enabled=True)
         
         return crew
-
-    def _parse_crew_result(self, result):
-        """Parse crew results into structured format"""
-        # Handle different result formats from Gemini
-        if hasattr(result, 'raw'):
-            outputs = [result.raw] if isinstance(result.raw, str) else list(result.raw) if result.raw else []
-        elif isinstance(result, dict):
-            outputs = list(result.values())
-        elif isinstance(result, str):
-            outputs = [result]
-        else:
-            outputs = []
+    
+    def _store_ads_in_database_safe(self, ads_data) -> list:
+        """
+        Store ads in the database with enhanced transaction management and deduplication.
+        Returns list of successfully stored ads.
+        """
+        if not ads_data:
+            return []
+            
+        from app.core.db import SessionLocal
+        from app.crud.ad_crud import create_ad, get_existing_ad_by_link
+        from sqlalchemy.exc import IntegrityError, SQLAlchemyError
         
-        comparison_report = outputs[0] if len(outputs) > 0 else "Comparison report not generated."
+        stored_ads = []
+        failed_ads = []
+        duplicate_ads = []
         
-        def safe_json_loads(data, default_val):
-            if not data:
-                return default_val
-            try:
-                if isinstance(data, str):
-                    return json.loads(data)
-                return data if isinstance(data, list) else default_val
-            except (json.JSONDecodeError, TypeError):
-                return default_val
+        db = SessionLocal()
+        try:
+            for ad in ads_data:
+                if not isinstance(ad, dict) or not ad.get("URL"):
+                    self.logger.warning("Skipping invalid ad data", ad_data=str(ad)[:100])
+                    continue
+                    
+                ad_data = {
+                    "title": ad.get("Ad Title", "Not Found"),
+                    "price": ad.get("Price (in LKR)", "Not Found"),
+                    "location": ad.get("Location", "Not Found"),
+                    "mileage": ad.get("Mileage (in km)", "Not Found"),
+                    "year": str(ad.get("Year of Manufacture", "Not Found")),
+                    "link": ad.get("URL", "")
+                }
+                
+                try:
+                    # Check if ad already exists before attempting to create
+                    existing_ad = get_existing_ad_by_link(db, ad_data["link"])
+                    if existing_ad:
+                        duplicate_ads.append(ad_data["link"])
+                        self.logger.debug("Duplicate ad skipped", link=ad_data["link"])
+                        continue
+                    
+                    # Create new ad
+                    created_ad = create_ad(db, ad_data)
+                    stored_ads.append(created_ad)
+                    self.logger.info("Ad stored successfully", 
+                                   title=ad_data["title"], 
+                                   link=ad_data["link"])
+                    
+                except IntegrityError as e:
+                    db.rollback()
+                    duplicate_ads.append(ad_data["link"])
+                    self.logger.debug("Duplicate ad detected during insert", 
+                                    link=ad_data["link"], 
+                                    error=str(e))
+                    
+                except SQLAlchemyError as e:
+                    db.rollback()
+                    failed_ads.append(ad_data["link"])
+                    self.logger.error("Database error storing ad", 
+                                    link=ad_data["link"], 
+                                    error=str(e))
+                    
+                except Exception as e:
+                    db.rollback()
+                    failed_ads.append(ad_data["link"])
+                    self.logger.error("Unexpected error storing ad", 
+                                    link=ad_data["link"], 
+                                    error=str(e))
+            
+            # Final commit for all successful operations
+            db.commit()
+            
+            # Log summary
+            self.logger.info("Database storage completed", 
+                           stored_count=len(stored_ads),
+                           duplicate_count=len(duplicate_ads),
+                           failed_count=len(failed_ads),
+                           total_processed=len(ads_data))
+            
+        except Exception as e:
+            db.rollback()
+            self.logger.error("Critical database error during ad storage", error=str(e))
+            
+        finally:
+            db.close()
+            
+        return stored_ads
+    
+    def _store_ads_in_database(self, ads_data):
+        """
+        Legacy method - kept for backward compatibility.
+        """
+        return self._store_ads_in_database_safe(ads_data)
+    def _store_comparison_in_database(self, vehicle1, vehicle2, comparison_report, metadata):
+        """
+        Store the comparison report in the database.
+        """
+        from app.core.db import SessionLocal
+        from app.crud.comparison_crud import create_comparison
+        db = SessionLocal()
+        try:
+            stored_comparison = create_comparison(db, vehicle1, vehicle2, comparison_report, metadata)
+            self.logger.info("Comparison report stored successfully", 
+                            vehicle1=vehicle1, 
+                            vehicle2=vehicle2)
+            return stored_comparison
+        except Exception as e:
+            self.logger.error("Failed to store comparison report", 
+                            vehicle1=vehicle1, 
+                            vehicle2=vehicle2, 
+                            error=str(e))
+        finally:
+            db.close()
 
-        vehicle1_ads = safe_json_loads(outputs[2] if len(outputs) > 2 else '[]', [])
-        vehicle2_ads = safe_json_loads(outputs[4] if len(outputs) > 4 else '[]', [])
+    def _execute_comparison_task_and_store(self, agents):
+        """
+        Execute only the comparison task and store the result immediately.
+        """
+        try:
+            # Create comparison task
+            tasks_manager = VehicleAnalysisTasks()
+            comparison_task = tasks_manager.vehicle_comparison_task(
+                agents['comparison'], self.vehicle1, self.vehicle2
+            )
+            
+            # Create a minimal crew for comparison task only
+            comparison_crew = Crew(
+                agents=[agents['comparison']],
+                tasks=[comparison_task],
+                process=Process.sequential,
+                verbose=True,
+                memory=False,
+                cache=True
+            )
+            
+            # Execute comparison task
+            self.logger.info("Executing comparison task")
+            result = comparison_crew.kickoff()
+            
+            # Extract comparison report from result
+            comparison_report = self._extract_comparison_from_result(result)
+            
+            # Clean and store the comparison report immediately
+            self.logger.info("Cleaning and storing comparison report")
+            cleaned_report = self._clean_comparison_report(comparison_report)
+            
+            # Store in database with metadata
+            metadata = {
+                "llm_provider": "google-gemini",
+                "model": settings.GEMINI_MODEL,
+                "task_type": "comparison_only"
+            }
+            
+            self._store_comparison_in_database(
+                self.vehicle1, self.vehicle2, cleaned_report, metadata
+            )
+            
+            self.logger.info("Comparison report stored successfully")
+            return cleaned_report
+            
+        except Exception as e:
+            self.logger.error("Failed to execute and store comparison task", error=str(e))
+            return "Error generating comparison report."
+    
+    def _extract_comparison_from_result(self, result):
+        """
+        Extract comparison report from crew result.
+        """
+        try:
+            if hasattr(result, 'raw'):
+                return result.raw if isinstance(result.raw, str) else str(result.raw)
+            elif isinstance(result, str):
+                return result
+            elif hasattr(result, 'tasks_output') and result.tasks_output:
+                task_output = result.tasks_output[0]
+                return task_output.raw if hasattr(task_output, 'raw') else str(task_output)
+            else:
+                return str(result)
+        except Exception as e:
+            self.logger.warning("Failed to extract comparison from result", error=str(e))
+            return "Comparison report extraction failed."
+    
+    def _create_ad_tasks(self, agents):
+        """
+        Create only ad finding and extraction tasks (excluding comparison).
+        """
+        tasks_manager = VehicleAnalysisTasks()
+        tasks = []
+        
+        # Ad finding tasks
+        find_ads_v1 = tasks_manager.find_ads_task(agents['ad_finder'], self.vehicle1)
+        find_ads_v2 = tasks_manager.find_ads_task(agents['ad_finder'], self.vehicle2)
+        tasks.extend([find_ads_v1, find_ads_v2])
+        
+        # Details extraction tasks
+        extract_v1 = tasks_manager.extract_details_task(
+            agents['details_extractor'], self.vehicle1, find_ads_v1
+        )
+        extract_v2 = tasks_manager.extract_details_task(
+            agents['details_extractor'], self.vehicle2, find_ads_v2
+        )
+        tasks.extend([extract_v1, extract_v2])
+        
+        return tasks
+    
+    def _parse_crew_result_with_comparison(self, result, comparison_report):
+        """
+        Parse crew result and combine with pre-stored comparison report.
+        """
+        try:
+            # Parse ad results (skip comparison parsing since it's already stored)
+            parsed_results = self._extract_task_outputs(result) if result else {}
+            
+            # Extract ad data with intelligent parsing
+            vehicle1_ads = self._parse_and_validate_ads(parsed_results.get('vehicle1_ads', []))
+            vehicle2_ads = self._parse_and_validate_ads(parsed_results.get('vehicle2_ads', []))
+            
+            # Store ads in database with improved transaction handling
+            stored_ads = self._store_ads_in_database_safe(vehicle1_ads + vehicle2_ads)
+            self.logger.info(f"Successfully stored {len(stored_ads)} ads in database")
+            
+            # Convert to expected API format
+            vehicle1_ads_formatted = self._convert_to_ad_details_format(vehicle1_ads)
+            vehicle2_ads_formatted = self._convert_to_ad_details_format(vehicle2_ads)
 
-        return {
-            "comparison_report": comparison_report,
-            "vehicle1_ads": vehicle1_ads,
-            "vehicle2_ads": vehicle2_ads
-        }
+            return {
+                "comparison_report": comparison_report,  # Use pre-stored comparison
+                "vehicle1_ads": vehicle1_ads_formatted,
+                "vehicle2_ads": vehicle2_ads_formatted,
+                "metadata": {
+                    "total_ads_found": len(vehicle1_ads) + len(vehicle2_ads),
+                    "ads_stored": len(stored_ads),
+                    "parsing_success": True,
+                    "llm_provider": "google-gemini",
+                    "comparison_stored_separately": True
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Failed to parse ad results: {str(e)}", exc_info=True)
+            return {
+                "comparison_report": comparison_report,  # Still return the stored comparison
+                "vehicle1_ads": [],
+                "vehicle2_ads": [],
+                "metadata": {
+                    "total_ads_found": 0,
+                    "ads_stored": 0,
+                    "parsing_success": False,
+                    "error": str(e),
+                    "llm_provider": "google-gemini"
+                }
+            }
+
+    def _parse_crew_result(self, result) -> dict:
+        """
+        Parses the crew output and stores ads in database with improved error handling.
+        """
+        try:
+            # Enhanced result parsing with better format detection
+            parsed_results = self._extract_task_outputs(result)
+            
+            # Extract comparison report
+            comparison_report = parsed_results.get('comparison', "Comparison report not generated.")
+            
+            # Extract ad data with intelligent parsing
+            vehicle1_ads = self._parse_and_validate_ads(parsed_results.get('vehicle1_ads', []))
+            vehicle2_ads = self._parse_and_validate_ads(parsed_results.get('vehicle2_ads', []))
+            
+            # Store ads in database with improved transaction handling
+            stored_ads = self._store_ads_in_database_safe(vehicle1_ads + vehicle2_ads)
+            self.logger.info(f"Successfully stored {len(stored_ads)} ads in database")
+            
+            # Store comparison report in database
+            stored_comparison = self._store_comparison_in_database(
+                self.vehicle1, self.vehicle2, comparison_report, {
+                    "total_ads_found": len(vehicle1_ads) + len(vehicle2_ads),
+                    "ads_stored": len(stored_ads),
+                    "llm_provider": "google-gemini",
+                    "model": settings.GEMINI_MODEL
+                }
+            )
+            
+            # Convert to expected API format
+            vehicle1_ads_formatted = self._convert_to_ad_details_format(vehicle1_ads)
+            vehicle2_ads_formatted = self._convert_to_ad_details_format(vehicle2_ads)
+
+            return {
+                "comparison_report": comparison_report,
+                "vehicle1_ads": vehicle1_ads_formatted,
+                "vehicle2_ads": vehicle2_ads_formatted,
+                "metadata": {
+                    "total_ads_found": len(vehicle1_ads) + len(vehicle2_ads),
+                    "ads_stored": len(stored_ads),
+                    "parsing_success": True,
+                    "llm_provider": "google-gemini"
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Failed to parse crew result: {str(e)}", exc_info=True)
+            return {
+                "comparison_report": "Error generating comparison report.",
+                "vehicle1_ads": [],
+                "vehicle2_ads": [],
+                "metadata": {
+                    "total_ads_found": 0,
+                    "ads_stored": 0,
+                    "parsing_success": False,
+                    "error": str(e),
+                    "llm_provider": "google-gemini"
+                }
+            }

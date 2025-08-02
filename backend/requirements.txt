@@ -5,19 +5,24 @@ pydantic>=2.5.0
 
 # AI Agent Framework
 crewai>=0.150.0
-crewai[tools]>=0.150.0
+crewai-tools>=0.58.0
 litellm>=1.0.0
 
 # LLM Providers
 langchain-openai>=0.1.0
 langchain-google-genai>=1.0.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+openai>=1.0.0
+google-generativeai>=0.8.0
 
 # Web Scraping & Automation
 playwright>=1.40.0
 requests>=2.31.0
+beautifulsoup4>=4.12.0
 
 # Database
-SQLAlchemy>=2.0.0
+sqlalchemy>=2.0.0
 alembic>=1.13.0
 
 # Configuration & Environment
@@ -31,8 +36,10 @@ coloredlogs>=15.0.1
 click>=8.1.0
 python-multipart>=0.0.6
 typing-extensions>=4.8.0
-
-# Additional CrewAI Dependencies
 markdown>=3.5.0
-beautifulsoup4>=4.12.0
-google.generativeai
+
+# Additional Core Dependencies (Built-in modules: json, re, time, os, asyncio)
+
+# Note: After installing requirements, run:
+# playwright install
+# This installs the browser binaries needed for web scraping
