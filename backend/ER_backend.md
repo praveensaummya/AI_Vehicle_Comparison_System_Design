@@ -27,17 +27,7 @@ This document provides comprehensive entity-relationship information for the AI 
 - Status: Free tier with generous quotas, preferred for cost efficiency
 - Routing: LiteLLM with forced Google AI Studio provider
 
-**Secondary Provider**: OpenAI GPT-3.5-turbo (paid fallback)
-- Model: `gpt-3.5-turbo`
-- Configuration: `LLM_PROVIDER=openai`
-- Environment: `OPENAI_API_KEY`
-- Status: Stable paid service, used when Gemini unavailable
 
-**Tertiary Fallback**: Mock Agents (system stability)
-- Configuration: `USE_MOCK_CREW=true`
-- Triggers: API failures, rate limits, authentication errors
-- Behavior: Returns realistic sample data for uninterrupted service
-- Logging: All fallback activations are logged for monitoring
 
 ### Intelligent Crew Selection Logic
 
@@ -69,28 +59,25 @@ async def _select_optimal_crew(vehicle1: str, vehicle2: str):
 
 ```
 VehicleComparisonAgent (Expert Car Reviewer)
-├── LLM: Gemini 1.5-flash / OpenAI GPT-3.5-turbo (configurable)
+├── LLM: Gemini 1.5-flash (configurable)
 ├── Uses: Custom SearchTool (Serper API) for web search
 ├── Output: Markdown-formatted comparison report
 ├── Process: Technical specs, reliability, pros/cons analysis
 └── Fallback: Mock comparison report on API failure
 
 SriLankanAdFinderAgent (Local Market Analyst)
-├── LLM: Gemini 1.5-flash / OpenAI GPT-3.5-turbo (configurable)
-├── Uses: Custom SearchTool for ikman.lk & riyasewana.com
+├── LLM: Gemini 1.5-flash (configurable)
+├── Uses: Custom SearchTool and SriLankanScraperTool for ikman.lk & riyasewana.com
 ├── Intelligence: Distinguishes individual ad URLs from search pages
 ├── Output: List of individual advertisement URLs (not search pages)
-├── Process: Targeted search with site-specific URL patterns
-└── Fallback: Mock ad URLs on API failure
+└── Process: Targeted search with site-specific URL patterns
 
 AdDetailsExtractorAgent (Ad Data Extractor)
-├── LLM: Gemini 1.5-flash / OpenAI GPT-3.5-turbo (configurable)
-├── Uses: Playwright scraper with intelligent mileage interpretation
-├── Intelligence: Converts "just 50km" → "50,000 km" contextually
+├── LLM: Gemini 1.5-flash (configurable)
+├── Uses: SyncAdDetailsExtractorTool with BeautifulSoup
 ├── Output: JSON objects with structured ad data
 ├── Process: Extracts price, location, mileage, year from ad pages
-├── Database: Saves ads with duplicate link prevention
-└── Fallback: Mock ad details on API failure
+└── Fallback: Uses robust error handling
 ```
 
 ### Web Scraping Intelligence
@@ -528,15 +515,10 @@ backend/
 │   │   ├── comparison_agent.py      # Vehicle comparison agent
 │   │   ├── ad_finder_agent.py       # Ad finding agent with URL intelligence
 │   │   ├── details_extractor_agent.py # Ad details extraction agent
-│   │   └── mcp_enhanced_agent.py    # MCP enhanced agent (future)
 │   ├── tools/
 │   │   ├── __init__.py
 │   │   ├── search_tool.py           # Custom Serper search tool
-│   │   ├── playwright_scraper.py    # Intelligent web scraping with mileage parsing
-│   │   ├── playwright_tool.py       # Playwright integration for CrewAI
-│   │   ├── ad_details_tool.py       # Ad details extraction tool
-│   │   ├── sri_lankan_scraper.py    # Sri Lankan website specific scraper
-│   │   └── mcp_openai_tool.py       # MCP OpenAI tool integration
+│   │   ├── sri_lankan_scraper.py    # SriLankan website scraper
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   └── vehicle_schemas.py       # Pydantic models for API
