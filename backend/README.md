@@ -1,6 +1,83 @@
-# AI Vehicle Comparison System - Backend
+# 🚗 AI Vehicle Comparison System - Backend
 
-A production-ready FastAPI backend service that uses CrewAI agents with LLM support from Google Gemini 1.5-flash to compare vehicles and find local advertisements in Sri Lanka. Features intelligent LLM provider selection, robust fallback mechanisms, and comprehensive error handling for system stability.
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com)
+[![CrewAI](https://img.shields.io/badge/CrewAI-0.150+-orange.svg)](https://crewai.com)
+[![Google Gemini](https://img.shields.io/badge/Google-Gemini%201.5%20Flash-red.svg)](https://ai.google.dev)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> A production-ready FastAPI backend service powered by intelligent AI agents for vehicle comparison and local advertisement discovery in Sri Lanka.
+
+## 📋 Table of Contents
+
+- [🌟 Features](#-features)
+- [🏗️ Architecture Overview](#️-architecture-overview)
+- [🚀 Quick Start](#-quick-start)
+- [📁 Project Structure](#-project-structure)
+- [🔧 API Endpoints](#-api-endpoints)
+- [🤖 AI Agents](#-ai-agents)
+- [🛠️ Debugging Guide](#️-debugging-guide)
+- [🔍 Logging and Monitoring](#-logging-and-monitoring)
+- [🚨 Error Handling](#-error-handling)
+- [🔧 Configuration](#-configuration)
+- [📊 Performance Optimization](#-performance-optimization)
+- [🧪 Testing](#-testing)
+- [🚀 Deployment](#-deployment)
+- [📝 Development Workflow](#-development-workflow)
+- [🤝 Contributing](#-contributing)
+- [📞 Support](#-support)
+- [📄 License](#-license)
+
+## 🌟 Features
+
+- **🤖 AI-Powered Analysis**: Uses Google Gemini 1.5-flash with CrewAI agents for intelligent vehicle comparisons
+- **🔍 Smart Web Scraping**: Automated discovery of vehicle listings from popular Sri Lankan websites
+- **📊 Real-time Data**: Live price analysis and market insights
+- **🛡️ Robust Error Handling**: Comprehensive error management with graceful degradation
+- **🚀 High Performance**: Asynchronous processing with optimized database operations
+- **📈 RESTful API**: Well-documented endpoints with OpenAPI/Swagger integration
+- **🔧 Developer Friendly**: Extensive debugging tools and comprehensive logging
+
+## 🏗️ Architecture Overview
+
+```mermaid
+graph TB
+    A[Client Request] --> B[FastAPI Router]
+    B --> C[GeminiVehicleAnalysisCrew]
+    C --> D[VehicleComparisonAgent]
+    C --> E[SriLankanAdFinderAgent]
+    C --> F[AdDetailsExtractorAgent]
+    
+    D --> G[Google Gemini 1.5-flash]
+    E --> H[Serper Search API]
+    F --> I[BeautifulSoup Scraper]
+    
+    H --> J[ikman.lk]
+    H --> K[riyasewana.com]
+    I --> J
+    I --> K
+    
+    C --> L[SQLite Database]
+    L --> M[Ads Table]
+    L --> N[Comparisons Table]
+    
+    style A fill:#e1f5fe
+    style G fill:#f3e5f5
+    style L fill:#e8f5e8
+```
+
+### System Components
+
+| Component | Technology | Purpose |
+|-----------|------------|----------|
+| **API Layer** | FastAPI | RESTful API endpoints with async support |
+| **AI Orchestration** | CrewAI | Multi-agent workflow coordination |
+| **Language Model** | Google Gemini 1.5-flash | Vehicle analysis and comparison |
+| **Web Search** | Serper API | Finding vehicle listings online |
+| **Web Scraping** | BeautifulSoup + Requests | Extracting structured data from websites |
+| **Database** | SQLite + SQLAlchemy | Data persistence and ORM |
+| **Configuration** | Pydantic + python-dotenv | Environment and settings management |
+| **Logging** | Structlog + Coloredlogs | Comprehensive logging and monitoring |
 
 ## 🚀 Quick Start
 
@@ -32,12 +109,7 @@ A production-ready FastAPI backend service that uses CrewAI agents with LLM supp
    pip install -r requirements.txt
    ```
 
-4. **Install Playwright browsers:**
-   ```bash
-   playwright install
-   ```
-
-5. **Set up environment variables:**
+4. **Set up environment variables:**
    Create a `.env` file in the backend directory:
    ```env
    # LLM Provider Configuration
@@ -58,14 +130,71 @@ A production-ready FastAPI backend service that uses CrewAI agents with LLM supp
    DATABASE_URL=sqlite:///./ads.db
    ```
 
-6. **Run database migrations:**
+5. **Initialize the database:**
+   
+   The system uses SQLite as the default database to store vehicle advertisements and comparison results. You need to initialize the database before running the application.
+   
+   **Method 1: Using the initialization script (Recommended)**
    ```bash
-   alembic upgrade head
+   python "debugging/db debugging/init_db.py"
+   ```
+   
+   **Method 2: Manual initialization (if needed)**
+   ```python
+   # Run this Python script to create tables manually
+   from app.core.db import engine
+   from app.models.ad import Base
+   from app.models.comparison import Base as ComparisonBase
+   
+   # Create all tables
+   Base.metadata.create_all(bind=engine)
+   ComparisonBase.metadata.create_all(bind=engine)
+   ```
+   
+   **Database Schema:**
+   - **ads** table: Stores scraped vehicle advertisements
+     - `id`: Primary key
+     - `title`: Advertisement title
+     - `price`: Vehicle price
+     - `location`: Vehicle location
+     - `mileage`: Vehicle mileage
+     - `year`: Manufacturing year
+     - `link`: Original advertisement URL
+     - `vehicle_model`: Vehicle model name
+     - `created_at`: Timestamp
+   
+   - **comparisons** table: Stores vehicle comparison results
+     - `id`: Primary key
+     - `vehicle1`: First vehicle name
+     - `vehicle2`: Second vehicle name
+     - `comparison_report`: Generated comparison report
+     - `created_at`: Timestamp
+   
+   **Verify Database Creation:**
+   ```bash
+   # Check if database file was created
+   ls -la ads.db
+   
+   # Inspect database structure (optional)
+   python debugging/db\ debugging/inspect_ads_db.py
    ```
 
-7. **Run the server:**
+6. **Run the server:**
    ```bash
-   uvicorn main:app --reload --host 0.0.0.0 --port 8000
+   python -m uvicorn app.main:app --reload --port 8080 --host 0.0.0.0
+   ```
+
+7. **Quick Test:**
+   Open your browser and navigate to:
+   - **API Documentation**: http://localhost:8080/docs (Swagger UI)
+   - **Health Check**: http://localhost:8080/ 
+   - **Alternative Documentation**: http://localhost:8080/redoc (ReDoc)
+   
+   Test the main endpoint:
+   ```bash
+   curl -X POST "http://localhost:8080/api/v1/analyze-vehicles" \
+        -H "Content-Type: application/json" \
+        -d '{"vehicle1": "Toyota Aqua", "vehicle2": "Honda Fit"}'
    ```
 
 ## 📁 Project Structure
@@ -175,6 +304,59 @@ Health check endpoint.
 }
 ```
 
+### GET `/api/v1/health`
+
+Detailed health check with service status.
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-08-01T14:55:32Z",
+  "version": "1.0.0",
+  "services": {
+    "api": "operational",
+    "openai_configured": true,
+    "serper_configured": true,
+    "mock_mode": false
+  }
+}
+```
+
+### POST `/api/v1/vehicle-ads-stats`
+
+Filter ads and return price statistics.
+
+**Request Body:**
+```json
+{
+  "ads": [
+    {
+      "title": "Toyota Aqua 2018",
+      "price": "LKR 6,500,000",
+      "location": "Colombo",
+      "mileage": "45,000 km",
+      "year": "2018"
+    }
+  ],
+  "min_price": 5000000,
+  "max_price": 8000000,
+  "year": 2018,
+  "location": "Colombo"
+}
+```
+
+### POST `/api/v1/test-openai`
+
+Test OpenAI API connectivity (development/debugging endpoint).
+```json
+{
+  "status": "success",
+  "message": "OpenAI API connection successful",
+  "model": "gpt-3.5-turbo",
+  "response": "OK",
+  "tokens_used": 5
+}
+```
+
 ## 🤖 AI Agents
 
 ### 1. VehicleComparisonAgent
@@ -204,8 +386,11 @@ Health check endpoint.
 # Make sure you're in the backend directory
 cd backend
 
-# Install in development mode
-pip install -e .
+# Add current directory to Python path
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+
+# Or run with proper module path
+python -m app.main
 ```
 
 #### 2. Environment Variables Not Found
@@ -347,7 +532,7 @@ class Settings:
 ### 1. Parallel Processing
 The crew currently runs sequentially. To enable parallel processing:
 ```python
-# In app/crew.py
+# In app/gemini_crew.py
 crew = Crew(
     agents=[...],
     tasks=[...],
@@ -357,7 +542,11 @@ crew = Crew(
 ```
 
 ### 2. Caching
-Add Redis caching for repeated requests:
+Add Redis caching for repeated requests (requires additional dependencies):
+```bash
+# Install caching dependencies
+pip install fastapi-cache2 redis aioredis
+```
 ```python
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
@@ -369,7 +558,11 @@ async def startup():
 ```
 
 ### 3. Rate Limiting
-Add rate limiting to prevent abuse:
+Add rate limiting to prevent abuse (requires additional dependencies):
+```bash
+# Install rate limiting dependencies
+pip install slowapi
+```
 ```python
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -385,8 +578,33 @@ async def analyze_vehicles(request: Request, vehicle_request: VehicleAnalysisReq
 
 ## 🧪 Testing
 
-### Unit Tests
-Create `tests/` directory and add test files:
+### Manual Testing
+The system can be tested manually using the debugging scripts in the `debugging/` directory:
+
+**Test individual components:**
+```bash
+# Test Gemini API connection
+python "debugging/api debugging/test_gemini_direct.py"
+
+# Test scrapers
+python "debugging/tools debugging/test_sync_scraper.py"
+python "debugging/tools debugging/test_sri_lankan_scraper.py"
+
+# Test database
+python "debugging/db debugging/inspect_ads_db.py"
+```
+
+### Setting up Automated Tests (Optional)
+To add automated testing, install pytest and create test files:
+```bash
+# Install testing dependencies
+pip install pytest pytest-asyncio httpx
+
+# Create tests directory
+mkdir tests
+```
+
+**Example unit test:**
 ```python
 # tests/test_agents.py
 import pytest
@@ -397,7 +615,7 @@ def test_comparison_agent_creation():
     assert agent.role == "Expert Car Reviewer"
 ```
 
-### Integration Tests
+**Example API test:**
 ```python
 # tests/test_api.py
 from fastapi.testclient import TestClient
@@ -405,17 +623,15 @@ from app.main import app
 
 client = TestClient(app)
 
-def test_analyze_vehicles():
-    response = client.post(
-        "/api/v1/analyze-vehicles",
-        json={"vehicle1": "Toyota Aqua", "vehicle2": "Honda Fit"}
-    )
+def test_health_check():
+    response = client.get("/")
     assert response.status_code == 200
+    assert response.json()["message"] == "Welcome to the AI Vehicle Analyst API"
 ```
 
 Run tests:
 ```bash
-pytest tests/
+pytest tests/ -v
 ```
 
 ## 🚀 Deployment
@@ -453,8 +669,7 @@ git checkout -b feature/new-agent
 
 # Make changes
 # Test locally
-uvicorn app.main:app --reload --port 8080
-
+python -m uvicorn app.main:app --reload --port 8080 --host 0.0.0.0
 # Commit changes
 git add .
 git commit -m "Add new agent feature"
