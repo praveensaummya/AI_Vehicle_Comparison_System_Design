@@ -1,17 +1,17 @@
 # AI Vehicle Comparison System
 
 ## Overview
-The AI Vehicle Comparison System is a comprehensive tool for intelligently comparing vehicles and discovering local advertisements in the Sri Lankan market. It features a FastAPI backend service and a Next.js frontend application, designed to work together seamlessly to provide insight into vehicle analysis through Advanced Machine Learning models and automated web scraping.
+The AI Vehicle Comparison System serves as a sophisticated platform for conducting intelligent vehicle comparisons and uncovering local advertisements specific to the Sri Lankan market. Our architecture integrates a robust FastAPI backend service with a dynamic Next.js frontend application, ensuring comprehensive vehicle analysis powered by advanced machine learning models and automated web scraping technologies.
 
 ---
 
 ## Backend
 
 ### Features
-- **AI-Powered Analysis**: Utilizes Google Gemini 1.5-flash and CrewAI agents for intelligent vehicle comparisons.
-- **Smart Web Scraping**: Automated discovery of vehicle listings from popular Sri Lankan websites.
-- **Real-time Data**: Live price analysis and market insights.
-- **RESTful API**: Well-documented endpoints with OpenAPI/Swagger integration.
+- **AI-Powered Analysis**: Harnesses the capabilities of Google Gemini 1.5-flash and CrewAI agents for advanced intelligent vehicle comparisons.
+- **Smart Web Scraping**: Leverages automated processes to discover vehicle listings from leading Sri Lankan websites.
+- **Real-time Data**: Provides live data analysis and market insights with remarkable accuracy.
+- **RESTful API**: Features extensively documented endpoints, facilitating seamless integration through OpenAPI/Swagger.
 
 ### Quick Start
 1. **Clone the Repository**:
@@ -26,7 +26,7 @@ The AI Vehicle Comparison System is a comprehensive tool for intelligently compa
 
 3. **Set up the Environment**:
    - Create and activate a virtual environment.
-   - Install dependencies via `uv pip install -r requirements.txt`.
+   - Install dependencies using `uv pip install -r requirements.txt`.
    - Configure environment variables in a `.env` file.
 
 4. **Run the Backend Server**:
@@ -35,19 +35,19 @@ The AI Vehicle Comparison System is a comprehensive tool for intelligently compa
    ```
 
 ### Key Technologies
-- **FastAPI**: For developing the API.
-- **CrewAI**: For orchestrating multi-agent workflows.
-- **SQLAlchemy**: For ORM and database management.
-- **SQLite**: As the database for storing advertisements.
+- **FastAPI**: A high-performance framework for creating APIs with Python.
+- **CrewAI**: An orchestration framework to manage complex multi-agent workflows.
+- **SQLAlchemy**: Provides a robust ORM for seamless database interactions.
+- **SQLite**: Acts as a lightweight yet powerful database for storing advertisements.
 
 ---
 
 ## Frontend
 
 ### Features
-- **React with Next.js**: Offers a modern development environment with efficient Hot Module Replacement.
-- **Tailwind CSS and FontAwesome**: For stylistic decisions and icon usage.
-- **Responsive Design**: Optimized for different device sizes and screen orientations.
+- **React with Next.js**: Employs a modern framework for server-side rendering and static site generation.
+- **Tailwind CSS and FontAwesome**: Utilized for highly customizable styling and iconography.
+- **Responsive Design**: Adaptively scales across diverse device dimensions and orientations.
 
 ### Quick Start
 1. **Navigate to the Frontend Directory**:
@@ -66,17 +66,17 @@ The AI Vehicle Comparison System is a comprehensive tool for intelligently compa
    ```
 
 4. **Open in Browser**:
-   Access the application at `http://localhost:3000`.
+   Launch the application by visiting `http://localhost:3000`.
 
 ### Key Technologies
-- **Next.js**: For server-rendered and static websites.
-- **React**: For building user interfaces.
-- **Tailwind CSS & FontAwesome**: For styling and icons.
+- **Next.js**: A powerful React framework known for optimized server-rendered applications.
+- **React**: The de-facto library for building user interfaces.
+- **Tailwind CSS & FontAwesome**: Enriches the UI with scalable styling and comprehensive icon support.
 
 ---
 
 ## Contributing
-We welcome contributions! Please see the contribution guidelines for more details.
+We welcome contributions and are eager to collaborate! Please refer to our contribution guidelines for further details.
 
 ## License
-This project is licensed under the MIT License.
+Licensed under the MIT License, ensuring open and free usage in both commercial and non-commercial projects.
