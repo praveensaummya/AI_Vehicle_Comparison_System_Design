@@ -54,7 +54,7 @@ SriLankanAdFinderAgent (Local Market Analyst)
 
 AdDetailsExtractorAgent (Ad Data Extractor)
 ├── LLM: OpenAI GPT-4o-mini / Gemini-1.5-flash (configurable)
-├── Uses: Playwright scraper for web scraping
+├── Uses: requests + BeautifulSoup for web scraping
 ├── Output: JSON objects with structured ad data
 ├── Process: Extracts price, location, mileage, year from ad pages
 └── Fallback: Mock ad details on API failure
@@ -464,10 +464,9 @@ const validateVehicleInput = (vehicle: string): string | null => {
 - `langchain-google-genai` - Google Gemini integration
 - `google-generativeai` - Direct Google Gemini API access
 
-**Web Scraping & Automation**:
-- `playwright` - Browser automation for ad scraping
-- `requests` - HTTP client for API calls
-- `beautifulsoup4>=4.12.0` - HTML parsing
+**Web Scraping & Data Extraction**:
+- `requests` - HTTP client for web scraping and API calls
+- `beautifulsoup4>=4.12.0` - HTML parsing and data extraction
 
 **Database & Storage**:
 - `SQLAlchemy` - ORM for database operations
@@ -524,8 +523,7 @@ export LITELLM_MODEL="gemini/gemini-1.5-flash"
 # Install dependencies
 pip install -r requirements.txt
 
-# Install Playwright browsers
-playwright install
+# No additional browser installation needed for requests/BeautifulSoup
 
 # Run database migrations
 alembic upgrade head
@@ -546,18 +544,14 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```dockerfile
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies (minimal for requests/BeautifulSoup)
 RUN apt-get update && apt-get install -y \
-    chromium \
-    chromium-driver \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install -r requirements.txt
-
-# Install Playwright browsers
-RUN playwright install chromium
 
 # Copy application code
 COPY . /app
@@ -581,9 +575,9 @@ CMD ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port
 - Consider read replicas for high-traffic scenarios
 
 **Memory Management**:
-- Monitor Playwright browser instances
-- Implement browser pool for concurrent scraping
-- Configure appropriate timeouts for web scraping
+- Monitor HTTP request sessions and connection pooling
+- Implement request retry mechanisms with exponential backoff
+- Configure appropriate timeouts for web scraping requests
 
 ### Error Handling & Monitoring
 
@@ -626,7 +620,7 @@ CMD ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port
 ### Load Testing
 - Concurrent API requests
 - LLM API rate limit handling
-- Browser instance management
+- HTTP session management and connection pooling
 - Database connection pooling
 
 ### Sample Test Data

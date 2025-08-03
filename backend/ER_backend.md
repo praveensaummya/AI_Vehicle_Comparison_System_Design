@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides comprehensive entity-relationship information for the AI Vehicle Comparison System backend. It's designed to help frontend developers understand data structures, API interactions, and UI component requirements based on the current production implementation.
+This document provides comprehensive entity-relationship information for the AI Vehicle Comparison System backend, detailing data structures, API interactions, and requirements based on the current production implementation designed for intelligent vehicle analysis and advertisement extraction.
 
 ## System Architecture
 
@@ -521,9 +521,7 @@ backend/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                      # FastAPI application with intelligent crew selection
-│   ├── crew.py                      # OpenAI crew configuration
-│   ├── gemini_crew.py               # Gemini crew configuration with LiteLLM routing
-│   ├── mock_crew.py                 # Fallback mock crew with realistic data
+│   ├── gemini_crew.py               # Primary Gemini crew configuration with LiteLLM routing
 │   ├── tasks.py                     # Task definitions for all agents
 │   ├── agents/
 │   │   ├── __init__.py
@@ -536,16 +534,20 @@ backend/
 │   │   ├── search_tool.py           # Custom Serper search tool
 │   │   ├── playwright_scraper.py    # Intelligent web scraping with mileage parsing
 │   │   ├── playwright_tool.py       # Playwright integration for CrewAI
+│   │   ├── ad_details_tool.py       # Ad details extraction tool
+│   │   ├── sri_lankan_scraper.py    # Sri Lankan website specific scraper
 │   │   └── mcp_openai_tool.py       # MCP OpenAI tool integration
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   └── vehicle_schemas.py       # Pydantic models for API
 │   ├── models/
 │   │   ├── __init__.py
-│   │   └── ad.py                    # SQLAlchemy Ad model
+│   │   ├── ad.py                    # SQLAlchemy Ad model with session tracking
+│   │   └── comparison.py            # VehicleComparison model for storing analysis results
 │   ├── crud/
 │   │   ├── __init__.py
-│   │   └── ad_crud.py               # Ad CRUD operations with filtering
+│   │   ├── ad_crud.py               # Ad CRUD operations with filtering
+│   │   └── comparison_crud.py       # Vehicle comparison CRUD operations
 │   ├── utils/
 │   │   └── ad_stats.py              # Ad statistics and price parsing
 │   └── core/

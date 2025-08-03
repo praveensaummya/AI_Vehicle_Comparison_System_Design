@@ -115,45 +115,6 @@ async def analyze_vehicles(request: VehicleAnalysisRequest):
     except Exception as e:
         error_msg = str(e)
         
-        # Check if this is an API quota/rate limit/compatibility error
-        is_api_error = (
-            "quota" in error_msg.lower() or 
-            "rate limit" in error_msg.lower() or 
-            "RateLimitError" in str(type(e).__name__) or
-            "supports_stop_words" in error_msg or  # CrewAI compatibility issue
-            "DefaultCredentialsError" in error_msg or  # Vertex AI auth issue
-            "APIConnectionError" in str(type(e).__name__)  # General API connection error
-        )
-        
-        if is_api_error:
-            logger.warning("API error detected, falling back to mock crew", 
-                          vehicle1=request.vehicle1, 
-                          vehicle2=request.vehicle2,
-                          error=error_msg,
-                          error_type=type(e).__name__)
-            
-            try:
-                # Fallback to mock crew
-                mock_crew = MockVehicleAnalysisCrew(request.vehicle1, request.vehicle2)
-                result = mock_crew.run()
-                validated_result = VehicleAnalysisResponse(**result)
-                
-                logger.info("Mock crew analysis completed successfully", 
-                           vehicle1=request.vehicle1, 
-                           vehicle2=request.vehicle2,
-                           ads_found_v1=len(validated_result.vehicle1_ads),
-                           ads_found_v2=len(validated_result.vehicle2_ads))
-                
-                return validated_result
-                
-            except Exception as mock_error:
-                logger.error("Mock crew also failed", 
-                            vehicle1=request.vehicle1, 
-                            vehicle2=request.vehicle2,
-                            error=str(mock_error),
-                            error_type=type(mock_error).__name__)
-                raise HTTPException(status_code=500, detail="Both real and mock analysis failed")
-        
         logger.error("Analysis failed with exception", 
                     vehicle1=request.vehicle1, 
                     vehicle2=request.vehicle2,

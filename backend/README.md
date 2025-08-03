@@ -52,7 +52,7 @@ A production-ready FastAPI backend service that uses CrewAI agents with multi-LL
    SERPER_API_KEY=your_serper_api_key_here
    
    # Database Configuration
-   DATABASE_URL=sqlite:///./vehicle_analysis.db
+   DATABASE_URL=sqlite:///./ads.db
    ```
 
 6. **Run database migrations:**

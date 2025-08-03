@@ -17,7 +17,6 @@ openai>=1.0.0
 google-generativeai>=0.8.0
 
 # Web Scraping & Automation
-playwright>=1.40.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 
@@ -39,7 +38,3 @@ typing-extensions>=4.8.0
 markdown>=3.5.0
 
 # Additional Core Dependencies (Built-in modules: json, re, time, os, asyncio)
-
-# Note: After installing requirements, run:
-# playwright install
-# This installs the browser binaries needed for web scraping

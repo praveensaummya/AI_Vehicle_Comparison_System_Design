@@ -287,17 +287,19 @@ class GeminiVehicleAnalysisCrew:
         db = SessionLocal()
         try:
             for ad in ads_data:
-                if not isinstance(ad, dict) or not ad.get("URL"):
+                # Check for either "URL" (old format) or "url" (new scraper format)
+                ad_url = ad.get("URL") or ad.get("url") if isinstance(ad, dict) else None
+                if not isinstance(ad, dict) or not ad_url:
                     self.logger.warning("Skipping invalid ad data", ad_data=str(ad)[:100])
                     continue
                     
                 ad_data = {
-                    "title": ad.get("Ad Title", "Not Found"),
-                    "price": ad.get("Price (in LKR)", "Not Found"),
-                    "location": ad.get("Location", "Not Found"),
-                    "mileage": ad.get("Mileage (in km)", "Not Found"),
-                    "year": str(ad.get("Year of Manufacture", "Not Found")),
-                    "link": ad.get("URL", "")
+                    "title": ad.get("ad_title", "Not Found"),
+                    "price": ad.get("price_lkr", "Not Found"),
+                    "location": ad.get("location", "Not Found"),
+                    "mileage": ad.get("mileage_km", "Not Found"),
+                    "year": str(ad.get("year", "Not Found")),
+                    "link": ad_url
                 }
                 
                 # Determine vehicle name based on ad data or context
@@ -305,8 +307,8 @@ class GeminiVehicleAnalysisCrew:
                 if ad.get("vehicle_name"):
                     vehicle_name = ad.get("vehicle_name")
                 else:
-                    # Try to determine from ad title or context
-                    title_lower = ad.get("Ad Title", "").lower()
+                    # Try to determine from ad title (check both possible field names)
+                    title_lower = (ad.get("Ad Title") or ad.get("ad_title", "")).lower()
                     if "aqua" in title_lower or self.vehicle1.lower() in title_lower:
                         vehicle_name = self.vehicle1
                     elif "fit" in title_lower or self.vehicle2.lower() in title_lower:
@@ -521,7 +523,7 @@ class GeminiVehicleAnalysisCrew:
         """
         Validate that ad data contains required fields.
         """
-        required_fields = ['Ad Title', 'URL']
+        required_fields = ['ad_title', 'url']
         return all(field in ad for field in required_fields)
     
     def _normalize_ad_data(self, ad: dict) -> dict:
@@ -529,12 +531,12 @@ class GeminiVehicleAnalysisCrew:
         Normalize ad data with consistent field formatting.
         """
         normalized = {
-            'Ad Title': str(ad.get('Ad Title', 'Not Found')).strip(),
-            'Price (in LKR)': self._normalize_price(ad.get('Price (in LKR)', 'Not Found')),
-            'Location': str(ad.get('Location', 'Not Found')).strip(),
-            'Mileage (in km)': self._normalize_mileage(ad.get('Mileage (in km)', 'Not Found')),
-            'Year of Manufacture': self._normalize_year(ad.get('Year of Manufacture', 'Not Found')),
-            'URL': str(ad.get('URL', '')).strip()
+            'ad_title': str(ad.get('ad_title', 'Not Found')).strip(),
+            'price_lkr': self._normalize_price(ad.get('price_lkr', 'Not Found')),
+            'location': str(ad.get('location', 'Not Found')).strip(),
+            'mileage_km': self._normalize_mileage(ad.get('mileage_km', 'Not Found')),
+            'year': self._normalize_year(ad.get('year', 'Not Found')),
+            'url': str(ad.get('url', '')).strip()
         }
         
         return normalized
@@ -590,17 +592,19 @@ class GeminiVehicleAnalysisCrew:
     def _convert_to_ad_details_format(self, ads_data):
         """
         Convert the agent output format to AdDetails format
+        Support both old format ("Ad Title") and new scraper format ("ad_title")
         """
         converted_ads = []
         for ad in ads_data:
             if isinstance(ad, dict):
+                # Handle both old and new field formats
                 converted_ad = {
-                    "title": ad.get("Ad Title", "Not Found"),
-                    "price": ad.get("Price (in LKR)", "Not Found"),
-                    "location": ad.get("Location", "Not Found"),
-                    "mileage": ad.get("Mileage (in km)", "Not Found"),
-                    "year": str(ad.get("Year of Manufacture", "Not Found")),
-                    "link": ad.get("URL", "Not Found")
+                    "title": (ad.get("Ad Title") or ad.get("ad_title", "Not Found")),
+                    "price": (ad.get("Price (in LKR)") or ad.get("price_lkr", "Not Found")),
+                    "location": (ad.get("Location") or ad.get("location", "Not Found")),
+                    "mileage": (ad.get("Mileage (in km)") or ad.get("mileage_km", "Not Found")),
+                    "year": str(ad.get("Year of Manufacture") or ad.get("year", "Not Found")),
+                    "link": (ad.get("URL") or ad.get("url", "Not Found"))
                 }
                 converted_ads.append(converted_ad)
         return converted_ads
