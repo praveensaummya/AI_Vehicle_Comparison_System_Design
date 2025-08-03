@@ -1,6 +1,6 @@
 # AI Vehicle Comparison System - Backend
 
-A production-ready FastAPI backend service that uses CrewAI agents with multi-LLM support (OpenAI GPT-3.5-turbo and Google Gemini 1.5-flash) to compare vehicles and find local advertisements in Sri Lanka. Features intelligent LLM provider selection, robust fallback mechanisms, and comprehensive error handling for system stability.
+A production-ready FastAPI backend service that uses CrewAI agents with LLM support from Google Gemini 1.5-flash to compare vehicles and find local advertisements in Sri Lanka. Features intelligent LLM provider selection, robust fallback mechanisms, and comprehensive error handling for system stability.
 
 ## 🚀 Quick Start
 
@@ -40,16 +40,19 @@ A production-ready FastAPI backend service that uses CrewAI agents with multi-LL
 5. **Set up environment variables:**
    Create a `.env` file in the backend directory:
    ```env
-   # OpenAI Configuration (Primary LLM)
-   OPENAI_API_KEY=your_openai_api_key_here
-   OPENAI_MODEL_NAME=gpt-4o-mini
+   # LLM Provider Configuration
+   LLM_PROVIDER=gemini  # gemini, openai, or auto
    
-   # Google Gemini Configuration (Secondary LLM)
-   GOOGLE_API_KEY=your_google_api_key_here
-   GEMINI_API_KEY=your_google_api_key_here
+   # Google Gemini Configuration (Primary)
+   GEMINI_API_KEY=your_gemini_api_key_here
+   GOOGLE_API_KEY=your_gemini_api_key_here  # Same as GEMINI_API_KEY
+   GEMINI_MODEL=gemini-1.5-flash
    
    # Search Tool Configuration
    SERPER_API_KEY=your_serper_api_key_here
+   
+   # Mock Mode Configuration (for testing)
+   USE_MOCK_CREW=false  # Set to true to force mock mode
    
    # Database Configuration
    DATABASE_URL=sqlite:///./ads.db
@@ -72,53 +75,64 @@ backend/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                      # FastAPI application entry point
-│   ├── crew.py                      # OpenAI crew configuration
-│   ├── gemini_crew.py               # Gemini crew configuration
-│   ├── mock_crew.py                 # Fallback mock crew
+│   ├── gemini_crew.py               # Gemini crew configuration with LiteLLM routing
 │   ├── tasks.py                     # Task definitions for agents
 │   ├── agents/
 │   │   ├── __init__.py
-│   │   ├── comparison_agent.py      # Vehicle comparison agent
 │   │   ├── ad_finder_agent.py       # Ad finding agent
+│   │   ├── comparison_agent.py      # Vehicle comparison agent
 │   │   ├── details_extractor_agent.py # Ad details extraction agent
-│   │   └── mcp_enhanced_agent.py    # MCP enhanced agent (future)
-│   ├── tools/
+│   │   └── mcp_enhanced_agent.py    # MCP-enhanced agent with tool support
+│   ├── core/
 │   │   ├── __init__.py
-│   │   ├── search_tool.py           # Serper search tool
-│   │   ├── playwright_scraper.py    # Web scraping tool
-│   │   ├── playwright_tool.py       # Playwright integration
-│   │   └── mcp_openai_tool.py       # MCP OpenAI tool
+│   │   ├── config.py                # Configuration management
+│   │   └── db.py                    # Database configuration
+│   ├── crud/
+│   │   ├── __init__.py
+│   │   ├── ad_crud.py               # Ad CRUD operations
+│   │   └── comparison_crud.py       # Comparison CRUD operations
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── ad.py                    # SQLAlchemy Ad model
+│   │   └── comparison.py            # SQLAlchemy Comparison model
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   └── vehicle_schemas.py       # Pydantic models
-│   ├── models/
+│   ├── tools/
 │   │   ├── __init__.py
-│   │   └── ad.py                    # SQLAlchemy Ad model
-│   ├── crud/
-│   │   ├── __init__.py
-│   │   └── ad_crud.py               # Ad CRUD operations
-│   ├── utils/
-│   │   └── ad_stats.py              # Ad statistics utilities
-│   └── core/
-│       ├── __init__.py
-│       ├── config.py                # Configuration management
-│       └── db.py                    # Database configuration
-├── scripts/
-│   ├── start_mcp_servers.py         # MCP server startup script
-│   └── warp-mcp.ps1                 # PowerShell MCP script
-├── alembic/                         # Database migrations (auto-generated)
-│   ├── versions/
-│   └── alembic.ini
-├── ads.db                           # SQLite database file
-├── requirements.txt                 # Python dependencies
-├── mcp-config.json                  # MCP configuration
-├── test_openai_connection.py        # OpenAI connection test
-├── test_gemini_direct.py            # Gemini connection test
-├── run.md                           # Quick run instructions
-├── llm_switch.md                    # LLM switching guide
+│   │   ├── search_helper.py         # Search helper utilities
+│   │   ├── search_tool.py           # Serper search tool
+│   │   ├── sri_lankan_scraper.py    # SriLankan website scraper
+│   │   ├── sync_ad_details_tool.py  # Synchronous ad details extractor
+│   │   └── sync_beautifulsoup_scraper.py # BeautifulSoup-based scraper
+│   └── utils/
+│       └── ad_stats.py              # Ad statistics utilities
+├── debugging/
+│   ├── api debugging/
+│   │   └── test_gemini_direct.py    # Direct Gemini API testing
+│   ├── db debugging/
+│   │   ├── force_clear_db.py        # Database clearing utility
+│   │   ├── init_db.py               # Database initialization script
+│   │   ├── inspect_ads_db.py        # Database inspection tool
+│   │   └── query_ads_db.py          # Database query utility
+│   ├── tools debugging/
+│   │   ├── test_detailed_scraper.py # Detailed scraper testing
+│   │   ├── test_scraper.py          # Basic scraper testing
+│   │   ├── test_simple_extractor.py # Simple extractor testing
+│   │   ├── test_sri_lankan_scraper.py # Sri Lankan scraper testing
+│   │   ├── test_sync_extractor.py   # Sync extractor testing
+│   │   └── test_sync_scraper.py     # Sync scraper testing
+│   └── README.md                    # Debugging documentation
 ├── .env                             # Environment variables (create this)
+├── .env.example                     # Environment variables template
 ├── .gitignore
-└── README.md
+├── ads.db                           # SQLite database file
+├── ER_backend.md                    # Backend engineering requirements
+├── mcp-config.json                  # MCP configuration
+├── README.md                        # This documentation
+├── requirements.txt                 # Python dependencies
+├── run.md                           # Quick run instructions
+└── verification_report.json         # System verification report
 ```
 
 ## 🔧 API Endpoints
@@ -313,8 +327,10 @@ async def global_exception_handler(request, exc):
 ### Environment Variables
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENAI_API_KEY` | OpenAI API key for LLM | Yes |
+| `GEMINI_API_KEY` | Google Gemini API key for LLM | Yes |
 | `SERPER_API_KEY` | Serper API key for web search | Yes |
+| `LLM_PROVIDER` | LLM provider selection (gemini/openai/auto) | No |
+| `USE_MOCK_CREW` | Force mock mode for testing | No |
 
 ### Configuration File
 Edit `app/core/config.py` to add more configuration options:

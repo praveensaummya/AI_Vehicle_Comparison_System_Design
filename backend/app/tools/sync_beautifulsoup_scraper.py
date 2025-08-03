@@ -10,6 +10,7 @@ def extract_ad_details_sync(url: str) -> Dict[str, Any]:
     """
     Synchronously extracts ad details from a given URL using requests and BeautifulSoup.
     """
+    response = None
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -54,6 +55,15 @@ def extract_ad_details_sync(url: str) -> Dict[str, Any]:
             "url": url
         }
     except requests.RequestException as e:
+        # Check if we got a response and if it's a 410 error
+        if response is not None and hasattr(response, 'status_code') and response.status_code == 410:
+            # Exclude 410 Gone errors silently
+            print(f"Excluding URL due to 410 Gone: {url}")
+            return None
+        # Check if the error message contains '410' for other types of 410 errors
+        if '410' in str(e) or 'Gone' in str(e):
+            print(f"Excluding URL due to 410 Gone error: {url}")
+            return None
         return {
             "ad_title": f"Error: {e}",
             "price_lkr": "Error",
@@ -81,7 +91,8 @@ def batch_extract_ad_details_sync(urls: List[str], max_workers: int = 5) -> List
         for future in concurrent.futures.as_completed(future_to_url, timeout=60):
             try:
                 result = future.result()
-                results.append(result)
+                if result is not None:
+                    results.append(result)
             except Exception as e:
                 url = future_to_url[future]
                 error_result = {
@@ -104,7 +115,8 @@ def extract_ad_details_sequential(urls: List[str]) -> List[Dict[str, Any]]:
     for url in urls:
         try:
             result = extract_ad_details_sync(url)
-            results.append(result)
+            if result is not None:
+                results.append(result)
             # Small delay to be respectful to the server
             time.sleep(0.5)
         except Exception as e:
