@@ -132,7 +132,6 @@ backend/
 ├── README.md                        # This documentation
 ├── requirements.txt                 # Python dependencies
 ├── run.md                           # Quick run instructions
-└── verification_report.json         # System verification report
 ```
 
 ## 🔧 API Endpoints
@@ -329,7 +328,6 @@ async def global_exception_handler(request, exc):
 |----------|-------------|----------|
 | `GEMINI_API_KEY` | Google Gemini API key for LLM | Yes |
 | `SERPER_API_KEY` | Serper API key for web search | Yes |
-| `LLM_PROVIDER` | LLM provider selection (gemini/openai/auto) | No |
 | `USE_MOCK_CREW` | Force mock mode for testing | No |
 
 ### Configuration File
