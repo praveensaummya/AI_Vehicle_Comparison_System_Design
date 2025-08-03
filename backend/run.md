@@ -1,22 +1,8 @@
-# 1. Go to your backend folder
-cd your-project/backend
+# 1. Install all dependencies
+uv pip install -r requirements.txt
 
-# 2. Create the environment (only needs to be done once)
-python -m venv venv
+# 2. Initialize database
+uv run python -c "from app.core.db import engine, Base; from app.models.ad import Ad; Base.metadata.create_all(bind=engine)"
 
-# 3. Activate it (do this every time you start working)
-# On Windows:
-.\.venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
-
-# 4. Install packages (do this after creating the venv or when requirements change)
-pip install -r requirements.txt
-
-# 5. Run your FastAPI app, etc.
-# For example: uvicorn main:app --reload
-
-# 6. Deactivate when you're done
-deactivate
-
-pip install "crewai" "crewai-tools" "fastapi" "uvicorn[standard]" "python-dotenv" "beautifulsoup4" "requests" "google-search-results"
+# 3. Start the server
+python -m uvicorn app.main:app --reload --port 8080 --host 0.0.0.0

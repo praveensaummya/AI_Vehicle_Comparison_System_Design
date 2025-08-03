@@ -48,22 +48,20 @@ class VehicleAnalysisTasks:
     def extract_details_task(self, agent, vehicle, context_task) -> Task:
         return Task(
             description=dedent(f"""
-                For each URL provided in the context, use your Playwright tool to visit
+                For each URL provided in the context, use your Ad Details Extractor tool to visit
                 the page and extract key details for the '{vehicle}'.
 
                 Extract the following information:
-                - Ad Title
-                - Price (in LKR)
-                - Location
-                - Mileage (in km)
-                - Year of Manufacture
+                - ad_title
+                - price_lkr
+                - location
+                - mileage_km
+                - year
 
                 If a piece of information is not available on the page, use the value 'Not Found'.
             """),
-            expected_output=dedent(f"""
-                A clean, python-style list of JSON objects. Each object must represent one advertisement
-                and contain the extracted details along with the original link.
-            """),
+            expected_output=dedent(f"""A clean, python-style list of JSON objects. Each object must represent one advertisement
+                and contain the extracted details along with the original link."""),
             agent=agent,
             context=[context_task]
         )

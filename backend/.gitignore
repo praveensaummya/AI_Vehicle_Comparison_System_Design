@@ -5,3 +5,4 @@ __pycache__/
 .cursor/environment.json
 .cursor/snapshots/
 .cursor/snapshots/
+.env.example
