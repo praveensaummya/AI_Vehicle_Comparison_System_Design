@@ -2,21 +2,49 @@
 
 ## Overview
 
-This document provides comprehensive entity-relationship information for the AI Vehicle Comparison System backend, detailing data structures, API interactions, and requirements based on the current production implementation designed for intelligent vehicle analysis and advertisement extraction.
+This document provides comprehensive entity-relationship information for the AI Vehicle Comparison System backend, detailing data structures, API interactions, and requirements based on the current production implementation designed for intelligent vehicle analysis and advertisement extraction using a sophisticated multi-agent system.
 
 ## System Architecture
 
+### Current Agentic System Architecture
+
+The system employs a **CrewAI-based multi-agent architecture** powered by **Google Gemini 1.5-flash** as the primary LLM provider, orchestrating specialized AI agents for different aspects of vehicle analysis:
+
+```mermaid
+graph TB
+    A[FastAPI Request] --> B[GeminiVehicleAnalysisCrew]
+    B --> C[VehicleComparisonAgent]
+    B --> D[SriLankanAdFinderAgent] 
+    B --> E[AdDetailsExtractorAgent]
+    
+    C --> F[Google Gemini 1.5-flash]
+    D --> G[Serper Search API]
+    E --> H[SyncAdDetailsExtractorTool]
+    
+    G --> I[ikman.lk]
+    G --> J[riyasewana.com]
+    G --> K[patpat.lk]
+    H --> I
+    H --> J
+    H --> K
+    
+    B --> L[SQLite Database]
+    L --> M[ads table]
+    L --> N[vehicle_comparisons table]
+```
+
 ### Agentic System Flow
 
-1. **User Input** → Vehicle Analysis Request (FastAPI endpoint)
-2. **Intelligent Crew Selection** → Auto-select best available LLM provider
-3. **LLM Provider Priority** → Gemini (free tier) > OpenAI (paid) > Mock (fallback)
-4. **CrewAI Agents Process** → Vehicle Comparison + Ad Finding + Details Extraction
-5. **Web Scraping** → Playwright-based intelligent ad detail extraction
-6. **Database Storage** → SQLite with ad deduplication and CRUD operations
-7. **Fallback System** → Mock agents on API failures for system stability
-8. **System Output** → Structured JSON response with markdown comparison
-9. **Additional Features** → Ad statistics, health checks, API testing endpoints
+1. **User Input** → Vehicle Analysis Request (FastAPI `/api/v1/analyze-vehicles`)
+2. **Crew Initialization** → GeminiVehicleAnalysisCrew with API key validation
+3. **Agent Orchestration** → CrewAI sequential process coordination
+4. **Parallel Task Execution**:
+   - **VehicleComparisonAgent** → Technical analysis using Google Gemini
+   - **SriLankanAdFinderAgent** → Ad URL discovery via Serper + site-specific scraping
+   - **AdDetailsExtractorAgent** → Structured data extraction using BeautifulSoup
+5. **Database Operations** → SQLite storage with session tracking and deduplication
+6. **Response Assembly** → Structured JSON with markdown comparison report
+7. **Error Handling** → Comprehensive fallback and logging systems
 
 ### Current LLM Provider Configuration
 
@@ -25,34 +53,34 @@ This document provides comprehensive entity-relationship information for the AI 
 - Configuration: `LLM_PROVIDER=gemini`
 - Environment: `GEMINI_API_KEY`, `GOOGLE_API_KEY`
 - Status: Free tier with generous quotas, preferred for cost efficiency
-- Routing: LiteLLM with forced Google AI Studio provider
+- Routing: Direct Google AI Studio API via LangChain
+- API Validation: Comprehensive key validation with connection testing
 
-
-
-### Intelligent Crew Selection Logic
+### Simplified Crew Selection Logic (Current Implementation)
 
 ```python
 async def _select_optimal_crew(vehicle1: str, vehicle2: str):
     """
-    Priority: Gemini (free + generous) > OpenAI (paid) > Mock (fallback)
+    Select the Gemini crew for vehicle analysis
+    Uses the free Gemini API with generous quotas
     """
     
-    # Force mock mode if enabled
-    if settings.USE_MOCK_CREW:
-        return MockVehicleAnalysisCrew(vehicle1, vehicle2)
+    # Check if Gemini API key is configured
+    if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "your_gemini_api_key_here":
+        logger.error("Gemini API key not configured", 
+                    vehicle1=vehicle1, vehicle2=vehicle2)
+        raise ValueError("GEMINI_API_KEY is not properly configured.")
     
-    # Try Gemini first (preferred - free and generous quotas)
-    if settings.LLM_PROVIDER in ["gemini", "google-gemini"] or settings.LLM_PROVIDER == "auto":
-        if valid_gemini_key():
-            return GeminiVehicleAnalysisCrew(vehicle1, vehicle2)
-    
-    # Try OpenAI if Gemini not available
-    if settings.LLM_PROVIDER == "openai" or settings.LLM_PROVIDER == "auto":
-        if valid_openai_key():
-            return VehicleAnalysisCrew(vehicle1, vehicle2)
-    
-    # Fallback to mock if no APIs available
-    return MockVehicleAnalysisCrew(vehicle1, vehicle2)
+    try:
+        logger.info("Selecting Gemini crew (free tier with generous quotas)", 
+                   vehicle1=vehicle1, vehicle2=vehicle2, 
+                   provider="google-gemini", model=settings.GEMINI_MODEL)
+        return GeminiVehicleAnalysisCrew(vehicle1, vehicle2)
+    except Exception as e:
+        logger.error("Gemini crew initialization failed", 
+                    error=str(e), error_type=type(e).__name__,
+                    vehicle1=vehicle1, vehicle2=vehicle2)
+        raise
 ```
 
 ### Agent Workflow with Multi-LLM Support
@@ -149,16 +177,21 @@ Users can request research on ANY specific vehicle models available in the Sri L
 ```sql
 CREATE TABLE ads (
     id INTEGER PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
+    title VARCHAR(255),
     price VARCHAR(100),
     location VARCHAR(100),
     mileage VARCHAR(50),
     year VARCHAR(10),
-    link VARCHAR(500) UNIQUE NOT NULL
+    link VARCHAR(500) UNIQUE NOT NULL,
+    analysis_session_id VARCHAR(255),
+    vehicle_name VARCHAR(255),
+    comparison_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (comparison_id) REFERENCES vehicle_comparisons (id)
 );
 ```
 
-**SQLAlchemy Model**:
+**SQLAlchemy Model** (Current Implementation):
 ```python
 class Ad(Base):
     __tablename__ = "ads"
@@ -170,6 +203,13 @@ class Ad(Base):
     mileage = Column(String)
     year = Column(String)
     link = Column(String, unique=True, index=True)
+    analysis_session_id = Column(String, index=True)  # Links ads to analysis sessions
+    vehicle_name = Column(String, index=True)  # Which vehicle this ad is for
+    comparison_id = Column(Integer, ForeignKey("vehicle_comparisons.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationship to comparison - temporarily disabled to avoid circular import issues
+    # comparison = relationship("VehicleComparison", back_populates="ads")
 ```
 
 **Pydantic Schema**:
@@ -205,7 +245,48 @@ interface AdDetails {
 - Year validation (reasonable range: 1990-2024)
 - Clickable links opening in new tab
 
-### 3. Vehicle Analysis Response
+### 3. Vehicle Comparison (Database Entity)
+
+**Database Schema**: `vehicle_comparisons` table (SQLite)
+
+```sql
+CREATE TABLE vehicle_comparisons (
+    id INTEGER PRIMARY KEY,
+    analysis_session_id VARCHAR(255) UNIQUE,
+    vehicle1 VARCHAR(255),
+    vehicle2 VARCHAR(255),
+    comparison_report TEXT,
+    metadata_info TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME
+);
+```
+
+**SQLAlchemy Model** (Current Implementation):
+```python
+class VehicleComparison(Base):
+    __tablename__ = "vehicle_comparisons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    analysis_session_id = Column(String, unique=True, index=True)  # Unique session identifier
+    vehicle1 = Column(String, index=True)
+    vehicle2 = Column(String, index=True)
+    comparison_report = Column(Text)
+    metadata_info = Column(Text)  # JSON string for additional metadata
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationship to ads - temporarily disabled to avoid circular import issues
+    # ads = relationship("Ad", back_populates="comparison")
+```
+
+**Features**:
+- **Session Tracking**: Each analysis gets a unique session ID for linking ads and comparison
+- **Metadata Storage**: JSON string field for storing additional analysis metadata
+- **Audit Trail**: Created and updated timestamps for tracking
+- **Relationship**: Foreign key relationship with ads table
+
+### 4. Vehicle Analysis Response
 
 **Database Schema**: Not persisted (API response only)
 
@@ -515,10 +596,14 @@ backend/
 │   │   ├── comparison_agent.py      # Vehicle comparison agent
 │   │   ├── ad_finder_agent.py       # Ad finding agent with URL intelligence
 │   │   ├── details_extractor_agent.py # Ad details extraction agent
+│   │   └── mcp_enhanced_agent.py    # MCP-enhanced agent with tool support
 │   ├── tools/
 │   │   ├── __init__.py
-│   │   ├── search_tool.py           # Custom Serper search tool
-│   │   ├── sri_lankan_scraper.py    # SriLankan website scraper
+│   │   ├── search_helper.py         # Search helper utilities
+│   │   ├── search_tool.py           # Custom Serper search tool with AI-friendly output
+│   │   ├── sri_lankan_scraper.py    # SriLankan website scraper (ikman.lk, riyasewana.com, patpat.lk)
+│   │   ├── sync_ad_details_tool.py  # Synchronous ad details extractor
+│   │   └── sync_beautifulsoup_scraper.py # BeautifulSoup-based scraper
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   └── vehicle_schemas.py       # Pydantic models for API
@@ -536,17 +621,29 @@ backend/
 │       ├── __init__.py
 │       ├── config.py                # Configuration with LLM provider selection
 │       └── db.py                    # Database configuration
-├── scripts/
-│   ├── start_mcp_servers.py         # MCP server startup script
-│   └── warp-mcp.ps1                 # PowerShell MCP script
+├── debugging/
+│   ├── README.md                    # Debugging documentation
+│   ├── api debugging/
+│   │   └── test_gemini_direct.py    # Direct Gemini API testing
+│   ├── db debugging/
+│   │   ├── force_clear_db.py        # Database clearing utility
+│   │   ├── init_db.py               # Database initialization script
+│   │   ├── inspect_ads_db.py        # Database inspection tool
+│   │   └── query_ads_db.py          # Database query utility
+│   └── tools debugging/
+│       ├── test_detailed_scraper.py # Detailed scraper testing
+│       ├── test_scraper.py          # Basic scraper testing
+│       ├── test_simple_extractor.py # Simple extractor testing
+│       ├── test_sri_lankan_scraper.py # Sri Lankan scraper testing
+│       ├── test_sync_extractor.py   # Sync extractor testing
+│       └── test_sync_scraper.py     # Sync scraper testing
+├── .gitignore                       # Git ignore rules
 ├── ads.db                           # SQLite database file
-├── requirements.txt                 # Python dependencies
+├── ER_backend.md                    # Backend engineering requirements (this document)
 ├── mcp-config.json                  # MCP configuration
-├── test_openai_connection.py        # OpenAI connection test
-├── test_gemini_direct.py            # Gemini connection test
-├── run.md                           # Quick run instructions
-├── llm_switch.md                    # LLM switching guide
-└── README.md                        # Comprehensive documentation
+├── README.md                        # Comprehensive documentation
+├── requirements.txt                 # Python dependencies
+└── run.md                           # Quick run instructions
 ```
 
 ### Intelligent Features
