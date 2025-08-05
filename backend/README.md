@@ -375,52 +375,6 @@ Test OpenAI API connectivity (development/debugging endpoint).
 - **Goal:** Extract structured data from advertisement pages
 - **Output:** JSON objects with price, location, mileage, year, etc.
 
-## 🛠️ Debugging Guide
-
-### Common Issues and Solutions
-
-#### 1. Import Errors
-**Problem:** `ModuleNotFoundError: No module named 'app'`
-**Solution:**
-```bash
-# Make sure you're in the backend directory
-cd backend
-
-# Add current directory to Python path
-export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-
-# Or run with proper module path
-python -m app.main
-```
-
-#### 2. Environment Variables Not Found
-**Problem:** `KeyError: 'OPENAI_API_KEY'`
-**Solution:**
-- Check that `.env` file exists in backend directory
-- Verify API keys are correctly set
-- Restart the server after adding environment variables
-
-#### 3. CrewAI Tool Errors
-**Problem:** `SerperDevTool` not working
-**Solution:**
-```bash
-# Reinstall crewai with tools
-pip uninstall crewai
-pip install "crewai[tools]"
-```
-
-#### 4. Port Already in Use
-**Problem:** `OSError: [Errno 98] Address already in use`
-**Solution:**
-```bash
-# Kill process using port 8080
-# Windows
-netstat -ano | findstr :8080
-taskkill /PID <PID> /F
-
-# macOS/Linux
-lsof -ti:8080 | xargs kill -9
-```
 
 ### Debug Mode
 
@@ -429,47 +383,6 @@ Run with debug logging:
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8080 --log-level debug
 ```
 
-### Testing Individual Components
-
-#### Test Agents Individually
-Create a test script `test_agents.py`:
-```python
-from app.agents.comparison_agent import VehicleComparisonAgent
-from app.agents.ad_finder_agent import SriLankanAdFinderAgent
-from app.agents.details_extractor_agent import AdDetailsExtractorAgent
-
-# Test comparison agent
-comparison_agent = VehicleComparisonAgent().expert_reviewer()
-print("Comparison agent created successfully")
-
-# Test ad finder agent
-ad_finder_agent = SriLankanAdFinderAgent().ad_finder()
-print("Ad finder agent created successfully")
-
-# Test details extractor agent
-details_agent = AdDetailsExtractorAgent().details_extractor()
-print("Details extractor agent created successfully")
-```
-
-#### Test API Endpoint
-```bash
-curl -X POST "http://localhost:8080/api/v1/analyze-vehicles" \
-     -H "Content-Type: application/json" \
-     -d '{"vehicle1": "Toyota Aqua", "vehicle2": "Honda Fit"}'
-```
-
-## 🔍 Logging and Monitoring
-
-### Enable Detailed Logging
-Add to `app/main.py`:
-```python
-import logging
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-```
 
 ### Monitor Agent Execution
 The CrewAI agents run with `verbose=True`, so you'll see detailed execution logs in the console.
@@ -491,20 +404,7 @@ The CrewAI agents run with `verbose=True`, so you'll see detailed execution logs
   "detail": "An internal server error occurred."
 }
 ```
-
-### Custom Error Handling
-Add custom exception handlers in `app/main.py`:
-```python
-from fastapi import HTTPException
-from fastapi.responses import JSONResponse
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"An error occurred: {str(exc)}"}
-    )
-```
+``
 
 ## 🔧 Configuration
 
@@ -541,40 +441,9 @@ crew = Crew(
 )
 ```
 
-### 2. Caching
-Add Redis caching for repeated requests (requires additional dependencies):
-```bash
-# Install caching dependencies
-pip install fastapi-cache2 redis aioredis
-```
-```python
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.redis import RedisBackend
 
-@app.on_event("startup")
-async def startup():
-    redis = aioredis.from_url("redis://localhost", encoding="utf8")
-    FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
-```
 
-### 3. Rate Limiting
-Add rate limiting to prevent abuse (requires additional dependencies):
-```bash
-# Install rate limiting dependencies
-pip install slowapi
-```
-```python
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-
-@app.post("/api/v1/analyze-vehicles")
-@limiter.limit("5/minute")
-async def analyze_vehicles(request: Request, vehicle_request: VehicleAnalysisRequest):
-    # ... existing code
-```
 
 ## 🧪 Testing
 
